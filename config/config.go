@@ -14,23 +14,26 @@ import (
 )
 
 const (
-	defHost  = "0.0.0.0"
-	defPort  = 10092
-	defStore = "badger"
+	defHost      = "0.0.0.0"
+	defPort      = 10092
+	defStore     = "badger"
+	defStorePath = "data"
 )
 
 type Config struct {
 	Host          string         `toml:"host"`
 	Port          uint           `toml:"port"`
 	Store         string         `toml:"store"`
+	StorePath     string         `toml:"store_path"`
 	ConfigPath    string         `toml:"config_path"`
 	ScrapeConfigs []ScrapeConfig `yaml:"scrape_configs,omitempty"`
 }
 
 var defaultConfig = Config{
-	Host:  defHost,
-	Port:  defPort,
-	Store: defStore,
+	Host:      defHost,
+	Port:      defPort,
+	Store:     defStore,
+	StorePath: defStorePath,
 }
 
 // ScrapeConfig configures a scraping unit for conprof.

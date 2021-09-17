@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/crazycs520/continuous-profile/codec"
+	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/google/pprof/profile"
@@ -14,6 +15,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -30,8 +32,7 @@ type ScrapeSuite struct {
 	stopped   chan struct{}
 }
 
-func newScrapeLoop(ctx context.Context,
-	t *Target,
+func newScrapeSuite(ctx context.Context,
 	sc Scraper,
 	db *badger.DB,
 ) *ScrapeSuite {
@@ -46,7 +47,7 @@ func newScrapeLoop(ctx context.Context,
 	return sl
 }
 
-func (sl *ScrapeSuite) run(interval, timeout time.Duration, errc chan<- error) {
+func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 	nextStart := time.Now().UnixNano() % int64(interval)
 	select {
 	case <-time.After(time.Duration(nextStart)):
@@ -104,9 +105,8 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration, errc chan<- error) {
 			err := sl.db.Update(func(txn *badger.Txn) error {
 				return txn.Set(key.Encode(), buf.Bytes())
 			})
-			if err != nil && errc != nil {
+			if err != nil {
 				//level.Debug(sl.l).Log("err", err)
-				errc <- err
 			}
 
 			//sl.target.health = HealthGood
@@ -114,9 +114,6 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration, errc chan<- error) {
 			//sl.target.lastError = nil
 		} else {
 			//level.Debug(sl.l).Log("msg", "Scrape failed", "err", scrapeErr.Error())
-			if errc != nil {
-				errc <- scrapeErr
-			}
 
 			//sl.target.health = HealthBad
 			//sl.target.lastScrapeDuration = time.Since(start)
@@ -145,10 +142,16 @@ func (sl *ScrapeSuite) stop() {
 }
 
 type Scraper struct {
-	target  *Target
-	client  *http.Client
-	req     *http.Request
-	timeout time.Duration
+	target *Target
+	client *http.Client
+	req    *http.Request
+}
+
+func newScraper(target *Target, client *http.Client) Scraper {
+	return Scraper{
+		target: target,
+		client: client,
+	}
 }
 
 func (s *Scraper) scrape(ctx context.Context, w io.Writer) error {
@@ -211,28 +214,28 @@ type Target struct {
 	lastScrapeDuration time.Duration
 }
 
-func NewTarget(job, profileType string, u *url.URL) *Target {
-	return &Target{
-		job: job,
-		URL: u,
+func NewTarget(job, schema, address, profileType string, cfg *config.PprofProfilingConfig) *Target {
+	t := &Target{
+		job:         job,
+		profileType: profileType,
 	}
-}
-
-func (t *Target) BuildURL(schema, address, path string, header, params map[string]string) {
 	vs := url.Values{}
-
-	for k, v := range params {
+	for k, v := range cfg.Params {
 		vs.Set(k, v)
+	}
+	if cfg.Seconds > 0 {
+		vs.Add("seconds", strconv.Itoa(cfg.Seconds))
 	}
 
 	t.address = address
-	t.header = header
+	t.header = cfg.Header
 	t.URL = &url.URL{
 		Scheme:   schema,
 		Host:     t.address,
-		Path:     path,
+		Path:     cfg.Path,
 		RawQuery: vs.Encode(),
 	}
+	return t
 }
 
 func (t *Target) GetURLString() string {
