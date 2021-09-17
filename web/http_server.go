@@ -35,8 +35,10 @@ func (s *Server) StartServer() error {
 	}
 	go util.GoWithRecovery(func() {
 		err = s.httpServer.Serve(listener)
+		fmt.Println(err)
 		// log
 	}, nil)
+	fmt.Println("http server listen on ", s.address)
 	return nil
 }
 

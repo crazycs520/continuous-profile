@@ -1,6 +1,7 @@
 package signal
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -33,6 +34,7 @@ func SetupSignalHandler(shutdownFunc func(bool)) {
 
 	go func() {
 		sig := <-closeSignalChan
+		fmt.Printf("got signal (%v) to exit\n", sig)
 		//logutil.BgLogger().Info("got signal to exit", zap.Stringer("signal", sig))
 		shutdownFunc(sig == syscall.SIGQUIT)
 	}()

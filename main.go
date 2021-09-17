@@ -19,8 +19,8 @@ const (
 )
 
 var (
-	host       = flag.String(nmHost, "0.0.0.0", "http server host")
-	port       = flag.Uint(nmPort, 10101, "http server port")
+	host       = flag.String(nmHost, config.DefHost, "http server host")
+	port       = flag.Uint(nmPort, config.DefPort, "http server port")
 	configPath = flag.String(nmConfig, "", "config file path")
 )
 
