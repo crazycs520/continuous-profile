@@ -3,8 +3,8 @@ package scrape
 import (
 	"context"
 	"github.com/crazycs520/continuous-profile/config"
+	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
-	"github.com/dgraph-io/badger/v3"
 	commonconfig "github.com/prometheus/common/config"
 	"sync"
 	"time"
@@ -13,7 +13,10 @@ import (
 // Manager maintains a set of scrape pools and manages start/stop cycles
 // when receiving new target groups form the discovery manager.
 type Manager struct {
-	db        *badger.DB
+	store  store.Storage
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+
 	graceShut chan struct{}
 
 	mtxScrape    sync.Mutex // Guards the fields below.
@@ -23,16 +26,18 @@ type Manager struct {
 }
 
 // NewManager is the Manager constructor
-func NewManager(db *badger.DB) *Manager {
+func NewManager(store store.Storage) *Manager {
 	return &Manager{
-		db:            db,
+		store:         store,
 		scrapeSuites:  make(map[scrapeTargetKey]*ScrapeSuite),
 		graceShut:     make(chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 	}
 }
 
-func (m *Manager) InitScrape(ctx context.Context, db *badger.DB, scrapeConfigs []config.ScrapeConfig) error {
+func (m *Manager) InitScrape(scrapeConfigs []config.ScrapeConfig) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancel = cancel
 	for _, scfg := range scrapeConfigs {
 		for _, addr := range scfg.Targets {
 			for profileName, profileConfig := range scfg.ProfilingConfig.PprofConfig {
@@ -45,7 +50,7 @@ func (m *Manager) InitScrape(ctx context.Context, db *badger.DB, scrapeConfigs [
 					return err
 				}
 				scrape := newScraper(target, client)
-				scrapeSuite := newScrapeSuite(ctx, scrape, db)
+				scrapeSuite := newScrapeSuite(ctx, scrape, m.store)
 				key := scrapeTargetKey{
 					job:         scfg.JobName,
 					address:     addr,
@@ -54,7 +59,9 @@ func (m *Manager) InitScrape(ctx context.Context, db *badger.DB, scrapeConfigs [
 
 				interval := time.Duration(scfg.ScrapeInterval)
 				timeout := time.Duration(scfg.ScrapeTimeout)
+				m.wg.Add(1)
 				go util.GoWithRecovery(func() {
+					defer m.wg.Done()
 					scrapeSuite.run(interval, timeout)
 				}, nil)
 				m.scrapeSuites[key] = scrapeSuite
@@ -62,6 +69,14 @@ func (m *Manager) InitScrape(ctx context.Context, db *badger.DB, scrapeConfigs [
 		}
 	}
 	return nil
+}
+
+func (m *Manager) Close() error {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	m.wg.Wait()
+	return m.store.Close()
 }
 
 type scrapeTargetKey struct {

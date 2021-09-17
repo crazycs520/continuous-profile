@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"github.com/crazycs520/continuous-profile/codec"
 	"github.com/crazycs520/continuous-profile/config"
+	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
-	"github.com/dgraph-io/badger/v3"
 	"github.com/google/pprof/profile"
 	"github.com/pkg/errors"
 	"golang.org/x/net/context/ctxhttp"
@@ -24,7 +24,7 @@ type ScrapeSuite struct {
 	scraper        Scraper
 	lastScrapeSize int
 
-	db *badger.DB
+	store store.Storage
 
 	ctx       context.Context
 	scrapeCtx context.Context
@@ -34,11 +34,11 @@ type ScrapeSuite struct {
 
 func newScrapeSuite(ctx context.Context,
 	sc Scraper,
-	db *badger.DB,
+	store store.Storage,
 ) *ScrapeSuite {
 	sl := &ScrapeSuite{
 		scraper: sc,
-		db:      db,
+		store:   store,
 		stopped: make(chan struct{}),
 		ctx:     ctx,
 	}
@@ -102,9 +102,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 				Tp:       tp,
 				Instance: instance,
 			}
-			err := sl.db.Update(func(txn *badger.Txn) error {
-				return txn.Set(key.Encode(), buf.Bytes())
-			})
+			err := sl.store.Set(key.Encode(), buf.Bytes())
 			if err != nil {
 				//level.Debug(sl.l).Log("err", err)
 			}

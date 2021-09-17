@@ -7,6 +7,8 @@ import (
 	"github.com/crazycs520/continuous-profile/scrape"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/store/badger"
+	"github.com/crazycs520/continuous-profile/util/signal"
+	"github.com/crazycs520/continuous-profile/web"
 	"os"
 )
 
@@ -29,10 +31,24 @@ func main() {
 	mustBeNil(err)
 
 	cfg := config.GetGlobalConfig()
-	store, err := initStorage(cfg.Store, cfg.StorePath)
+	storage, err := initStorage(cfg.Store, cfg.StorePath)
 	mustBeNil(err)
 
-	manager := scrape.NewManager()
+	manager := scrape.NewManager(storage)
+	err = manager.InitScrape(cfg.ScrapeConfigs)
+	mustBeNil(err)
+
+	server := web.CreateHTTPServer(cfg.Host, cfg.Port)
+	err = server.StartServer()
+	mustBeNil(err)
+
+	exited := make(chan struct{})
+	signal.SetupSignalHandler(func(graceful bool) {
+		manager.Close()
+		server.Close()
+		close(exited)
+	})
+	<-exited
 }
 
 func initStorage(store, storagePath string) (store.Storage, error) {
