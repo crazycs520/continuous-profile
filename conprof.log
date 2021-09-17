@@ -1,0 +1,2 @@
+[2021/09/18 01:32:01.819 +08:00] [INFO] [http_server.go:44] ["http server started"] [address=0.0.0.0:10092]
+[2021/09/18 01:32:31.854 +08:00] [INFO] [signal.go:38] ["got signal to exit"] [signal=interrupt]

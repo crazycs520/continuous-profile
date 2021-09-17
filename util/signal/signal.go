@@ -1,7 +1,8 @@
 package signal
 
 import (
-	"fmt"
+	"github.com/crazycs520/continuous-profile/util/logutil"
+	"go.uber.org/zap"
 	"log"
 	"os"
 	"os/signal"
@@ -34,8 +35,7 @@ func SetupSignalHandler(shutdownFunc func(bool)) {
 
 	go func() {
 		sig := <-closeSignalChan
-		fmt.Printf("got signal (%v) to exit\n", sig)
-		//logutil.BgLogger().Info("got signal to exit", zap.Stringer("signal", sig))
+		logutil.BgLogger().Info("got signal to exit", zap.Stringer("signal", sig))
 		shutdownFunc(sig == syscall.SIGQUIT)
 	}()
 }

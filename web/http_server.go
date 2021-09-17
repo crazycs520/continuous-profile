@@ -3,6 +3,8 @@ package web
 import (
 	"fmt"
 	"github.com/crazycs520/continuous-profile/util"
+	"github.com/crazycs520/continuous-profile/util/logutil"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -35,10 +37,11 @@ func (s *Server) StartServer() error {
 	}
 	go util.GoWithRecovery(func() {
 		err = s.httpServer.Serve(listener)
-		fmt.Println(err)
-		// log
+		if err != nil {
+			logutil.BgLogger().Error("http server serve failed", zap.Error(err))
+		}
 	}, nil)
-	fmt.Println("http server listen on ", s.address)
+	logutil.BgLogger().Info("http server started", zap.String("address", s.address))
 	return nil
 }
 

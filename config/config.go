@@ -3,6 +3,8 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	"io/ioutil"
 	"net/url"
 	"sync/atomic"
@@ -26,6 +28,7 @@ type Config struct {
 	Store         string         `yaml:"store"`
 	StorePath     string         `yaml:"store_path"`
 	ConfigPath    string         `yaml:"config_path"`
+	Log           Log            `yaml:"log"`
 	ScrapeConfigs []ScrapeConfig `yaml:"scrape_configs,omitempty"`
 }
 
@@ -34,6 +37,10 @@ var defaultConfig = Config{
 	Port:      DefPort,
 	Store:     defStore,
 	StorePath: defStorePath,
+	Log: Log{
+		Level:   "info",
+		MaxSize: logutil.DefaultLogMaxSize,
+	},
 }
 
 // ScrapeConfig configures a scraping unit for conprof.
@@ -225,4 +232,26 @@ func (c Config) String() string {
 func trueValue() *bool {
 	a := true
 	return &a
+}
+
+// Log is the log section of config.
+type Log struct {
+	Level    string `yaml:"level" json:"level"`
+	Filename string `yaml:"filename" json:"filename"`
+	// Max size for a single file, in MB.
+	MaxSize int `yaml:"max_size" json:"max_size"`
+	// Max log keep days, default is never deleting.
+	MaxDays int `yaml:"max_days" json:"max_days"`
+	// Maximum number of old log files to retain.
+	MaxBackups int `yaml:"max_backups" json:"max_backups"`
+}
+
+func (l *Log) ToLogConfig() *logutil.LogConfig {
+	file := log.FileLogConfig{
+		Filename:   l.Filename,
+		MaxSize:    l.MaxSize,
+		MaxDays:    l.MaxDays,
+		MaxBackups: l.MaxBackups,
+	}
+	return logutil.NewLogConfig(l.Level, file)
 }

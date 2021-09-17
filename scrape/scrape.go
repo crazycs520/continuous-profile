@@ -8,8 +8,10 @@ import (
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
+	"github.com/crazycs520/continuous-profile/util/logutil"
 	"github.com/google/pprof/profile"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
 	"io"
 	"io/ioutil"
@@ -48,6 +50,8 @@ func newScrapeSuite(ctx context.Context,
 }
 
 func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
+	target := sl.scraper.target
+	logutil.BgLogger().Info("scraper start to run", target.GetZapLogFields()...)
 	nextStart := time.Now().UnixNano() % int64(interval)
 	select {
 	case <-time.After(time.Duration(nextStart)):
@@ -104,7 +108,12 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 			}
 			err := sl.store.Set(key.Encode(), buf.Bytes())
 			if err != nil {
-				//level.Debug(sl.l).Log("err", err)
+				fields := target.GetZapLogFields()
+				fields = append(fields, zap.Error(scrapeErr))
+				logutil.BgLogger().Info("scrape failed", fields...)
+			} else {
+				fields := target.GetZapLogFields()
+				logutil.BgLogger().Info("scrape success", fields...)
 			}
 
 			//sl.target.health = HealthGood
@@ -112,6 +121,9 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 			//sl.target.lastError = nil
 		} else {
 			//level.Debug(sl.l).Log("msg", "Scrape failed", "err", scrapeErr.Error())
+			fields := target.GetZapLogFields()
+			fields = append(fields, zap.Error(scrapeErr))
+			logutil.BgLogger().Info("scrape failed", fields...)
 
 			//sl.target.health = HealthBad
 			//sl.target.lastScrapeDuration = time.Since(start)
@@ -238,4 +250,12 @@ func NewTarget(job, schema, address, profileType string, cfg *config.PprofProfil
 
 func (t *Target) GetURLString() string {
 	return t.URL.String()
+}
+
+func (t *Target) GetZapLogFields() []zap.Field {
+	return []zap.Field{
+		zap.String("job", t.job),
+		zap.String("address", t.address),
+		zap.String("profile_type", t.profileType),
+	}
 }

@@ -2,26 +2,30 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"os"
+
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/scrape"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/store/badger"
+	"github.com/crazycs520/continuous-profile/util/logutil"
 	"github.com/crazycs520/continuous-profile/util/signal"
 	"github.com/crazycs520/continuous-profile/web"
-	"os"
+	"github.com/pingcap/log"
 )
 
 const (
-	nmHost   = "host"
-	nmPort   = "port"
-	nmConfig = "config"
+	nmHost    = "host"
+	nmPort    = "port"
+	nmConfig  = "config"
+	nmLogFile = "log-file"
 )
 
 var (
 	host       = flag.String(nmHost, config.DefHost, "http server host")
 	port       = flag.Uint(nmPort, config.DefPort, "http server port")
 	configPath = flag.String(nmConfig, "", "config file path")
+	logFile    = flag.String(nmLogFile, "", "log file name")
 )
 
 func main() {
@@ -29,6 +33,8 @@ func main() {
 
 	err := config.Initialize(*configPath, overrideConfig)
 	mustBeNil(err)
+
+	setupLog()
 
 	cfg := config.GetGlobalConfig()
 	storage, err := initStorage(cfg.Store, cfg.StorePath)
@@ -60,6 +66,12 @@ func initStorage(store, storagePath string) (store.Storage, error) {
 	}
 }
 
+func setupLog() {
+	cfg := config.GetGlobalConfig()
+	err := logutil.InitLogger(cfg.Log.ToLogConfig())
+	mustBeNil(err)
+}
+
 func overrideConfig(cfg *config.Config) {
 	actualFlags := make(map[string]bool)
 	flag.Visit(func(f *flag.Flag) {
@@ -75,12 +87,15 @@ func overrideConfig(cfg *config.Config) {
 	if actualFlags[nmPort] {
 		cfg.Port = *port
 	}
+	if actualFlags[nmLogFile] {
+		cfg.Log.Filename = *logFile
+	}
 }
 
 func mustBeNil(err error) {
 	if err == nil {
 		return
 	}
-	fmt.Println(err.Error())
+	log.Error(err.Error())
 	os.Exit(-1)
 }
