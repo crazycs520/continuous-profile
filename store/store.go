@@ -5,3 +5,7 @@ type Storage interface {
 	Set(k, v []byte) error
 	Close() error
 }
+
+type ReadOnlyStorage interface {
+	Get(k []byte) ([]byte, error)
+}

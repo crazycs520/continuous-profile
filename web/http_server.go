@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
 	"go.uber.org/zap"
@@ -17,11 +18,13 @@ import (
 type Server struct {
 	address    string
 	httpServer *http.Server
+	store      store.ReadOnlyStorage
 }
 
-func CreateHTTPServer(host string, port uint) *Server {
+func CreateHTTPServer(host string, port uint, store store.ReadOnlyStorage) *Server {
 	return &Server{
 		address: fmt.Sprintf("%v:%v", host, port),
+		store: store,
 	}
 }
 

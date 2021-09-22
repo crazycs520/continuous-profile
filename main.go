@@ -44,7 +44,7 @@ func main() {
 	err = manager.InitScrape(cfg.ScrapeConfigs)
 	mustBeNil(err)
 
-	server := web.CreateHTTPServer(cfg.Host, cfg.Port)
+	server := web.CreateHTTPServer(cfg.Host, cfg.Port, storage)
 	err = server.StartServer()
 	mustBeNil(err)
 
