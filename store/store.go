@@ -88,7 +88,6 @@ func (s *ProfileStorage) QueryProfileList(param *meta.BasicQueryParam) ([]meta.P
 
 		sqlBuf.Reset()
 		sqlBuf.WriteString(fmt.Sprintf("SELECT ts FROM %v WHERE ts >= ? and ts <= ?", s.getProfileTableName(pt)))
-		fmt.Println(sqlBuf.String(), args)
 		res, err := s.db.Query(sqlBuf.String(), args...)
 		if err != nil {
 			return nil, err
@@ -117,6 +116,52 @@ func (s *ProfileStorage) QueryProfileList(param *meta.BasicQueryParam) ([]meta.P
 		})
 	}
 	return result, nil
+}
+
+func (s *ProfileStorage) QueryProfileData(param *meta.BasicQueryParam, handleFn func(meta.ProfileTarget, int64, []byte) error) error {
+	if s.isClose() {
+		return ErrStoreIsClosed
+	}
+	if param == nil || handleFn == nil {
+		return nil
+	}
+	targets := param.Targets
+	if len(targets) == 0 {
+		targets = s.getAllTargets()
+	}
+
+	args := []interface{}{param.Begin, param.End}
+	sqlBuf := bytes.NewBuffer(make([]byte, 0, 32))
+	for _, pt := range targets {
+		exist := s.isProfileTargetExist(pt)
+		if !exist {
+			continue
+		}
+		sqlBuf.Reset()
+		sqlBuf.WriteString(fmt.Sprintf("SELECT ts, data FROM %v WHERE ts >= ? and ts <= ?", s.getProfileTableName(pt)))
+		res, err := s.db.Query(sqlBuf.String(), args...)
+		if err != nil {
+			return err
+		}
+		err = res.Iterate(func(d types.Document) error {
+			var ts int64
+			var data []byte
+			err = document.Scan(d, &ts, &data)
+			if err != nil {
+				return err
+			}
+			return handleFn(pt, ts, data)
+		})
+		if err != nil {
+			res.Close()
+			return err
+		}
+		err = res.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *ProfileStorage) isProfileTargetExist(pt meta.ProfileTarget) bool {

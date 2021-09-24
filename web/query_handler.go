@@ -1,6 +1,7 @@
 package web
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"github.com/crazycs520/continuous-profile/meta"
@@ -8,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Config struct {
@@ -37,6 +39,45 @@ func (s *Server) handleQueryList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, result)
+}
+
+func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		break
+	default:
+		serveError(w, http.StatusBadRequest, "only support post")
+		return
+	}
+	param, err := s.getQueryParamFromBody(r)
+	if err != nil {
+		serveError(w, http.StatusBadRequest, "parse query param error: "+err.Error())
+		return
+	}
+
+	w.Header().
+		Set("Content-Disposition",
+			fmt.Sprintf(`attachment; filename="profile"`+time.Now().Format("20060102150405")+".zip"))
+	zw := zip.NewWriter(w)
+	fn := func(pt meta.ProfileTarget, ts int64, data []byte) error {
+		fileName := fmt.Sprintf("%v_%v_%v_%v", pt.Tp, pt.Job, pt.Address, ts)
+		fw, err := zw.Create(fileName)
+		if err != nil {
+			return err
+		}
+		_, err = fw.Write(data)
+		return err
+	}
+
+	err = s.store.QueryProfileData(param, fn)
+	if err != nil {
+		serveError(w, http.StatusInternalServerError, "query profile error: "+err.Error())
+		return
+	}
+	err = zw.Close()
+	if err != nil {
+		logutil.BgLogger().Error("handle download request failed", zap.Error(err))
+	}
 }
 
 func (s *Server) getQueryParamFromBody(r *http.Request) (*meta.BasicQueryParam, error) {
