@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/crazycs520/continuous-profile/meta"
+	"github.com/crazycs520/continuous-profile/util/logutil"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/dgraph-io/badger/v3/options"
 	"github.com/genjidb/genji"
@@ -22,7 +23,8 @@ func NewProfileStorage(storagePath string) (*ProfileStorage, error) {
 		WithCompression(options.ZSTD).
 		WithZSTDCompressionLevel(3).
 		WithBlockSize(8 * 1024 * 1024).
-		WithValueThreshold(8 * 1024 * 1024)
+		WithValueThreshold(8 * 1024 * 1024).
+		WithLogger(logutil.BadgerLogger())
 	ng, err := badgerengine.NewEngine(opts)
 	if err != nil {
 		return nil, err

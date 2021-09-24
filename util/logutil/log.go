@@ -15,6 +15,7 @@
 package logutil
 
 import (
+	"fmt"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -77,4 +78,34 @@ func SetLevel(level string) error {
 // BgLogger is alias of `logutil.BgLogger()`
 func BgLogger() *zap.Logger {
 	return log.L()
+}
+
+func BadgerLogger() *Logger {
+	return &Logger{
+		Logger: BgLogger(),
+	}
+}
+
+type Logger struct {
+	*zap.Logger
+}
+
+func (l *Logger) Errorf(s string, i ...interface{}) {
+	msg := fmt.Sprintf(s, i)
+	l.Error(msg)
+}
+
+func (l *Logger) Warningf(s string, i ...interface{}) {
+	msg := fmt.Sprintf(s, i)
+	l.Warn(msg)
+}
+
+func (l *Logger) Infof(s string, i ...interface{}) {
+	msg := fmt.Sprintf(s, i)
+	l.Info(msg)
+}
+
+func (l *Logger) Debugf(s string, i ...interface{}) {
+	msg := fmt.Sprintf(s, i)
+	l.Debug(msg)
 }
