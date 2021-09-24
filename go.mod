@@ -16,6 +16,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/vmihailenco/tagparser v0.1.2 // indirect
 	go.opencensus.io v0.22.5 // indirect
+	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/zap v1.19.0
 	golang.org/x/net v0.0.0-20210525063256-abc453219eb5
 	gopkg.in/yaml.v2 v2.4.0

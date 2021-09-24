@@ -75,8 +75,12 @@ func (m *Manager) Close() error {
 	if m.cancel != nil {
 		m.cancel()
 	}
+	err := m.store.Close()
+	if err != nil {
+		return err
+	}
 	m.wg.Wait()
-	return m.store.Close()
+	return nil
 }
 
 type scrapeTargetKey struct {

@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/util/logutil"
 	"go.uber.org/zap"
 	"io"
@@ -16,19 +17,6 @@ type Config struct {
 	RetentionSecs uint `json:"retention_secs"`
 }
 
-type BasicQueryParam struct {
-	Begin   int64        `json:"begin_time"`
-	End     int64        `json:"end_time"`
-	Limit   int          `json:"limit"`
-	Targets []TargetNode `json:"targets"`
-}
-
-type TargetNode struct {
-	Job     string `json:"job"`
-	Address string `json:"address"`
-	Type    string `json:"type"`
-}
-
 func (s *Server) handleQueryList(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -37,10 +25,21 @@ func (s *Server) handleQueryList(w http.ResponseWriter, r *http.Request) {
 		serveError(w, http.StatusBadRequest, "only support post")
 		return
 	}
+	param, err := s.getQueryParamFromBody(r)
+	if err != nil {
+		serveError(w, http.StatusBadRequest, "parse query param error: "+err.Error())
+		return
+	}
 
+	result, err := s.store.QueryProfileList(param)
+	if err != nil {
+		serveError(w, http.StatusInternalServerError, "query profile error: "+err.Error())
+		return
+	}
+	writeData(w, result)
 }
 
-func (s *Server) getQueryParamFromBody(r *http.Request) (*BasicQueryParam, error) {
+func (s *Server) getQueryParamFromBody(r *http.Request) (*meta.BasicQueryParam, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
@@ -48,12 +47,32 @@ func (s *Server) getQueryParamFromBody(r *http.Request) (*BasicQueryParam, error
 	if len(body) == 0 {
 		return nil, nil
 	}
-	param := &BasicQueryParam{}
+	param := &meta.BasicQueryParam{}
 	err = json.Unmarshal(body, param)
 	if err != nil {
 		return nil, err
 	}
 	return param, nil
+}
+
+const (
+	headerContentType = "Content-Type"
+	contentTypeJSON   = "application/json"
+)
+
+func writeData(w http.ResponseWriter, data interface{}) {
+	js, err := json.MarshalIndent(data, "", " ")
+	if err != nil {
+		serveError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// write response
+	w.Header().Set(headerContentType, contentTypeJSON)
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(js)
+	if err != nil {
+		logutil.BgLogger().Error("write http response error", zap.Error(err))
+	}
 }
 
 func serveError(w http.ResponseWriter, status int, txt string) {

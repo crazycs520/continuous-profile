@@ -57,6 +57,7 @@ func (s *Server) createMux() *http.ServeMux {
 	router.Handle("/config", fn.Wrap(func() (*config.Config, error) {
 		return config.GetGlobalConfig(), nil
 	}))
+	router.HandleFunc("/list", s.handleQueryList)
 
 	serverMux := http.NewServeMux()
 	serverMux.Handle("/", router)
