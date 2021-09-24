@@ -18,14 +18,12 @@ import (
 const (
 	DefHost      = "0.0.0.0"
 	DefPort      = 10092
-	defStore     = "badger"
 	defStorePath = "data"
 )
 
 type Config struct {
 	Host          string         `yaml:"host"`
 	Port          uint           `yaml:"port"`
-	Store         string         `yaml:"store"`
 	StorePath     string         `yaml:"store_path"`
 	ConfigPath    string         `yaml:"config_path"`
 	Log           Log            `yaml:"log"`
@@ -35,7 +33,6 @@ type Config struct {
 var defaultConfig = Config{
 	Host:      DefHost,
 	Port:      DefPort,
-	Store:     defStore,
 	StorePath: defStorePath,
 	Log: Log{
 		Level:   "info",

@@ -7,7 +7,6 @@ import (
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/scrape"
 	"github.com/crazycs520/continuous-profile/store"
-	"github.com/crazycs520/continuous-profile/store/badger"
 	"github.com/crazycs520/continuous-profile/util/logutil"
 	"github.com/crazycs520/continuous-profile/util/signal"
 	"github.com/crazycs520/continuous-profile/web"
@@ -37,7 +36,7 @@ func main() {
 	setupLog()
 
 	cfg := config.GetGlobalConfig()
-	storage, err := initStorage(cfg.Store, cfg.StorePath)
+	storage, err := store.NewProfileStorage(cfg.StorePath)
 	mustBeNil(err)
 
 	manager := scrape.NewManager(storage)
@@ -55,15 +54,6 @@ func main() {
 		close(exited)
 	})
 	<-exited
-}
-
-func initStorage(store, storagePath string) (store.Storage, error) {
-	switch store {
-	case "badger":
-		return badger.NewDB(storagePath)
-	default:
-		panic("unsupported storage " + store)
-	}
 }
 
 func setupLog() {

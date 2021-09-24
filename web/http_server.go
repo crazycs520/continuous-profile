@@ -18,13 +18,13 @@ import (
 type Server struct {
 	address    string
 	httpServer *http.Server
-	store      store.ReadOnlyStorage
+	store      *store.ProfileStorage
 }
 
-func CreateHTTPServer(host string, port uint, store store.ReadOnlyStorage) *Server {
+func CreateHTTPServer(host string, port uint, store *store.ProfileStorage) *Server {
 	return &Server{
 		address: fmt.Sprintf("%v:%v", host, port),
-		store: store,
+		store:   store,
 	}
 }
 

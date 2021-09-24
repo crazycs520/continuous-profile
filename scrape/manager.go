@@ -13,7 +13,7 @@ import (
 // Manager maintains a set of scrape pools and manages start/stop cycles
 // when receiving new target groups form the discovery manager.
 type Manager struct {
-	store  store.Storage
+	store  *store.ProfileStorage
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
@@ -26,7 +26,7 @@ type Manager struct {
 }
 
 // NewManager is the Manager constructor
-func NewManager(store store.Storage) *Manager {
+func NewManager(store *store.ProfileStorage) *Manager {
 	return &Manager{
 		store:         store,
 		scrapeSuites:  make(map[scrapeTargetKey]*ScrapeSuite),

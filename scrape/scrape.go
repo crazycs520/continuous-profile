@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/crazycs520/continuous-profile/codec"
 	"github.com/crazycs520/continuous-profile/config"
+	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
@@ -26,7 +26,7 @@ type ScrapeSuite struct {
 	scraper        Scraper
 	lastScrapeSize int
 
-	store store.Storage
+	store *store.ProfileStorage
 
 	ctx       context.Context
 	scrapeCtx context.Context
@@ -34,10 +34,7 @@ type ScrapeSuite struct {
 	stopped   chan struct{}
 }
 
-func newScrapeSuite(ctx context.Context,
-	sc Scraper,
-	store store.Storage,
-) *ScrapeSuite {
+func newScrapeSuite(ctx context.Context, sc Scraper, store *store.ProfileStorage) *ScrapeSuite {
 	sl := &ScrapeSuite{
 		scraper: sc,
 		store:   store,
@@ -96,17 +93,11 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 
 			start.Nanosecond()
 			ts := util.Millisecond(start)
-			job := sl.scraper.target.job
-			tp := sl.scraper.target.profileType
-			instance := sl.scraper.target.address
-
-			key := codec.ProfileKey{
-				Ts:       ts,
-				Job:      job,
-				Tp:       tp,
-				Instance: instance,
-			}
-			err := sl.store.Set(key.Encode(), buf.Bytes())
+			err := sl.store.AddProfile(meta.ProfileTarget{
+				Tp:      sl.scraper.target.profileType,
+				Job:     sl.scraper.target.job,
+				Address: sl.scraper.target.address,
+			}, ts, buf.Bytes())
 			if err != nil {
 				fields := target.GetZapLogFields()
 				fields = append(fields, zap.Error(scrapeErr))
