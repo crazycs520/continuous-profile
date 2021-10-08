@@ -2,48 +2,72 @@ package config
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
-	"github.com/crazycs520/continuous-profile/util/logutil"
-	"github.com/pingcap/log"
 	"io/ioutil"
 	"net/url"
 	"sync/atomic"
 	"time"
 
+	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	commonconfig "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
+	"go.etcd.io/etcd/pkg/transport"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
 const (
-	DefHost      = "0.0.0.0"
-	DefPort      = 10092
-	defStorePath = "data"
+	DefHost                          = "0.0.0.0"
+	DefPort                          = 10092
+	defStorePath                     = "data"
+	DefProfilingIntervalSeconds      = 10
+	DefProfileSeconds                = 5
+	DefProfilingTimeoutSeconds       = 120
+	DefProfilingDataRetentionSeconds = 3 * 24 * 60 * 60 // 3 days
 )
 
 type Config struct {
-	Host          string         `yaml:"host"`
-	Port          uint           `yaml:"port"`
-	StorePath     string         `yaml:"store_path"`
-	ConfigPath    string         `yaml:"config_path"`
-	Log           Log            `yaml:"log"`
-	ScrapeConfigs []ScrapeConfig `yaml:"scrape_configs,omitempty"`
+	Host              string                  `yaml:"host"`
+	Port              uint                    `yaml:"port"`
+	StorePath         string                  `yaml:"store_path"`
+	ConfigPath        string                  `yaml:"config_path"`
+	PDAddr            string                  `yaml:"pd_address"`
+	Log               Log                     `yaml:"log"`
+	ContinueProfiling ContinueProfilingConfig `yaml:"-,omitempty"`
+	ScrapeConfigs     []*ScrapeConfig         `yaml:"scrape_configs,omitempty"`
+	Security          Security                `yaml:"security" json:"security"`
 }
 
 var defaultConfig = Config{
 	Host:      DefHost,
 	Port:      DefPort,
 	StorePath: defStorePath,
+	ContinueProfiling: ContinueProfilingConfig{
+		Enable:               false,
+		ProfileSeconds:       DefProfileSeconds,
+		IntervalSeconds:      DefProfilingIntervalSeconds,
+		TimeoutSeconds:       DefProfilingTimeoutSeconds,
+		DataRetentionSeconds: DefProfilingDataRetentionSeconds,
+	},
 	Log: Log{
 		Level:   "info",
 		MaxSize: logutil.DefaultLogMaxSize,
 	},
 }
 
+type ContinueProfilingConfig struct {
+	Enable               bool
+	ProfileSeconds       int
+	IntervalSeconds      int
+	TimeoutSeconds       int
+	DataRetentionSeconds int
+}
+
 // ScrapeConfig configures a scraping unit for conprof.
 type ScrapeConfig struct {
-	// Name of the section in the config
-	JobName string `yaml:"job_name,omitempty"`
+	ComponentName string `yaml:"component_name,omitempty"`
 	// A set of query parameters with which the target is scraped.
 	Params url.Values `yaml:"params,omitempty"`
 	// How frequently to scrape the targets of this scrape config.
@@ -120,6 +144,13 @@ func (c *Config) LoadAndCheck(configFile string) error {
 	return err
 }
 
+func (c *Config) GetHTTPScheme() string {
+	if c.Security.GetTLSConfig() != nil {
+		return "https"
+	}
+	return "http"
+}
+
 func (c *Config) checkValid() error {
 	for _, scrape := range c.ScrapeConfigs {
 		if scrape.ProfilingConfig == nil {
@@ -131,7 +162,7 @@ func (c *Config) checkValid() error {
 		}
 		if profileConf.Seconds >= int(time.Duration(scrape.ScrapeTimeout).Seconds()) {
 			return fmt.Errorf("job %v, profile.seconds(%v) should less than the scrapscrape_timeout(%v)",
-				scrape.JobName, profileConf.Seconds, time.Duration(scrape.ScrapeTimeout).String())
+				scrape.ComponentName, profileConf.Seconds, time.Duration(scrape.ScrapeTimeout).String())
 		}
 	}
 	return nil
@@ -179,8 +210,8 @@ func (c *Config) setDefaultFields() {
 
 func defaultScrapeConfig() ScrapeConfig {
 	return ScrapeConfig{
-		ScrapeInterval: model.Duration(time.Minute),
-		ScrapeTimeout:  model.Duration(time.Minute),
+		ScrapeInterval: model.Duration(DefProfilingIntervalSeconds * time.Second),
+		ScrapeTimeout:  model.Duration(DefProfilingTimeoutSeconds * time.Second),
 		Scheme:         "http",
 		ProfilingConfig: &ProfilingConfig{
 			PprofConfig: PprofConfig{
@@ -207,12 +238,8 @@ func defaultScrapeConfig() ScrapeConfig {
 				"profile": &PprofProfilingConfig{
 					Enabled: trueValue(),
 					Path:    "/debug/pprof/profile",
-					Seconds: 30, // By default Go collects 30s profile.
+					Seconds: DefProfileSeconds,
 				},
-				//"threadcreate": &PprofProfilingConfig{
-				//	Enabled: trueValue(),
-				//	Path:    "/debug/pprof/threadcreate",
-				//},
 			},
 		},
 	}
@@ -251,4 +278,35 @@ func (l *Log) ToLogConfig() *logutil.LogConfig {
 		MaxBackups: l.MaxBackups,
 	}
 	return logutil.NewLogConfig(l.Level, file)
+}
+
+type Security struct {
+	SSLCA     string `yaml:"ssl-ca" json:"cluster-ssl-ca"`
+	SSLCert   string `yaml:"ssl-cert" json:"cluster-ssl-cert"`
+	SSLKey    string `yaml:"ssl-key" json:"cluster-ssl-key"`
+	tlsConfig *tls.Config
+}
+
+func (s *Security) GetTLSConfig() *tls.Config {
+	if s.tlsConfig != nil {
+		return s.tlsConfig
+	}
+	if s.SSLCA == "" || s.SSLCert == "" || s.SSLKey == "" {
+		return nil
+	}
+	s.tlsConfig = buildTLSConfig(s.SSLCA, s.SSLKey, s.SSLCert)
+	return s.tlsConfig
+}
+
+func buildTLSConfig(caPath, keyPath, certPath string) *tls.Config {
+	tlsInfo := transport.TLSInfo{
+		TrustedCAFile: caPath,
+		KeyFile:       keyPath,
+		CertFile:      certPath,
+	}
+	tlsConfig, err := tlsInfo.ClientConfig()
+	if err != nil {
+		log.Fatal("Failed to load certificates", zap.Error(err))
+	}
+	return tlsConfig
 }

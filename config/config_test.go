@@ -24,7 +24,7 @@ func removeFile(t *testing.T, fileName string) {
 func TestReadConfigFile(t *testing.T) {
 	configFile := "config.yaml"
 	writeIntoFile(t, configFile, `scrape_configs:
-  - job_name: 'tidb'
+  - component_name: 'tidb'
     targets: ['0.0.0.0:10080', '0.0.0.0:10081']
 `)
 	defer removeFile(t, configFile)
@@ -33,20 +33,21 @@ func TestReadConfigFile(t *testing.T) {
 	conf := GetGlobalConfig()
 	require.Equal(t, len(conf.ScrapeConfigs), 1)
 	require.Equal(t, len(conf.ScrapeConfigs[0].ProfilingConfig.PprofConfig), 6)
-	require.Equal(t, conf.ScrapeConfigs[0].ScrapeInterval.String(), "1m")
-	require.Equal(t, conf.ScrapeConfigs[0].ScrapeTimeout.String(), "1m")
+	require.Equal(t, conf.ScrapeConfigs[0].ScrapeInterval.String(), "10s")
+	require.Equal(t, conf.ScrapeConfigs[0].ScrapeTimeout.String(), "2m")
 	require.Equal(t, conf.ScrapeConfigs[0].Targets, []string{"0.0.0.0:10080", "0.0.0.0:10081"})
 
 	// test invalid config
 	writeIntoFile(t, configFile, `scrape_configs:
-  - job_name: 'tidb'
+  - component_name: 'tidb'
     scrape_interval: 10s
     scrape_timeout: 10s
     profiling_config:
       pprof_config:
         profile:
           enabled: true
-          seconds: 10`)
+          seconds: 10
+    targets: ['0.0.0.0:10080', '0.0.0.0:10081']`)
 
 	err = Initialize(configFile, nil)
 	require.Equal(t, err.Error(), "job tidb, profile.seconds(10) should less than the scrapscrape_timeout(10s)")
@@ -55,7 +56,7 @@ func TestReadConfigFile(t *testing.T) {
 func TestProfileParams(t *testing.T) {
 	configFile := "config.yaml"
 	writeIntoFile(t, configFile, `scrape_configs:
-  - job_name: 'tidb'
+  - component_name: 'tidb'
     scrape_interval: 10s
     scrape_timeout: 10s
     profiling_config:

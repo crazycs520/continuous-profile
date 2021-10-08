@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/crazycs520/continuous-profile/discovery"
 	"os"
 
 	"github.com/crazycs520/continuous-profile/config"
@@ -39,7 +40,13 @@ func main() {
 	storage, err := store.NewProfileStorage(cfg.StorePath)
 	mustBeNil(err)
 
-	manager := scrape.NewManager(storage)
+	var discoveryCli *discovery.DiscoveryClient
+	if cfg.PDAddr != "" {
+		discoveryCli, err = discovery.NewDiscoveryClient(cfg.PDAddr, cfg.Security.GetTLSConfig())
+		mustBeNil(err)
+	}
+
+	manager := scrape.NewManager(storage, discoveryCli)
 	err = manager.InitScrape(cfg.ScrapeConfigs)
 	mustBeNil(err)
 

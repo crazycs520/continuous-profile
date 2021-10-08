@@ -2,20 +2,23 @@ package scrape
 
 import (
 	"context"
+	"sync"
+	"time"
+
 	"github.com/crazycs520/continuous-profile/config"
+	"github.com/crazycs520/continuous-profile/discovery"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
 	commonconfig "github.com/prometheus/common/config"
-	"sync"
-	"time"
 )
 
 // Manager maintains a set of scrape pools and manages start/stop cycles
 // when receiving new target groups form the discovery manager.
 type Manager struct {
-	store  *store.ProfileStorage
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	store        *store.ProfileStorage
+	discoveryCli *discovery.DiscoveryClient
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
 
 	graceShut chan struct{}
 
@@ -26,17 +29,25 @@ type Manager struct {
 }
 
 // NewManager is the Manager constructor
-func NewManager(store *store.ProfileStorage) *Manager {
+func NewManager(store *store.ProfileStorage, discoveryCli *discovery.DiscoveryClient) *Manager {
 	return &Manager{
 		store:         store,
+		discoveryCli:  discoveryCli,
 		scrapeSuites:  make(map[scrapeTargetKey]*ScrapeSuite),
 		graceShut:     make(chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 	}
 }
 
-func (m *Manager) InitScrape(scrapeConfigs []config.ScrapeConfig) error {
+func (m *Manager) InitScrape(scrapeConfigs []*config.ScrapeConfig) error {
+	var err error
 	ctx, cancel := context.WithCancel(context.Background())
+	if m.discoveryCli != nil {
+		scrapeConfigs, err = m.discoveryCli.GetAllScrapeTargets(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	m.cancel = cancel
 	for _, scfg := range scrapeConfigs {
 		for _, addr := range scfg.Targets {
@@ -44,15 +55,15 @@ func (m *Manager) InitScrape(scrapeConfigs []config.ScrapeConfig) error {
 				if *profileConfig.Enabled == false {
 					continue
 				}
-				target := NewTarget(scfg.JobName, scfg.Scheme, addr, profileName, profileConfig)
-				client, err := commonconfig.NewClientFromConfig(scfg.HTTPClientConfig, scfg.JobName)
+				target := NewTarget(scfg.ComponentName, scfg.Scheme, addr, profileName, profileConfig)
+				client, err := commonconfig.NewClientFromConfig(scfg.HTTPClientConfig, scfg.ComponentName)
 				if err != nil {
 					return err
 				}
 				scrape := newScraper(target, client)
 				scrapeSuite := newScrapeSuite(ctx, scrape, m.store)
 				key := scrapeTargetKey{
-					job:         scfg.JobName,
+					job:         scfg.ComponentName,
 					address:     addr,
 					profileType: profileName,
 				}
