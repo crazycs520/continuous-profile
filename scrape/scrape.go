@@ -187,7 +187,9 @@ func (s *Scraper) scrape(ctx context.Context, w io.Writer) error {
 
 	p, err := profile.ParseData(b)
 	if err != nil {
-		return errors.Wrap(err, "failed to parse target's pprof profile")
+		_, err = w.Write(b)
+		return err
+		//return errors.Wrap(err, "failed to parse target's pprof profile")
 	}
 
 	if len(p.Sample) == 0 {
@@ -245,7 +247,7 @@ func (t *Target) GetURLString() string {
 
 func (t *Target) GetZapLogFields() []zap.Field {
 	return []zap.Field{
-		zap.String("job", t.job),
+		zap.String("component", t.job),
 		zap.String("address", t.address),
 		zap.String("profile_type", t.profileType),
 	}

@@ -23,7 +23,8 @@ func removeFile(t *testing.T, fileName string) {
 
 func TestReadConfigFile(t *testing.T) {
 	configFile := "config.yaml"
-	writeIntoFile(t, configFile, `scrape_configs:
+	writeIntoFile(t, configFile, `pd_address: '0.0.0.0:2379'
+scrape_configs:
   - component_name: 'tidb'
     targets: ['0.0.0.0:10080', '0.0.0.0:10081']
 `)
@@ -31,6 +32,7 @@ func TestReadConfigFile(t *testing.T) {
 	err := Initialize(configFile, nil)
 	require.NoError(t, err)
 	conf := GetGlobalConfig()
+	require.Equal(t, conf.PDAddr, "0.0.0.0:2379")
 	require.Equal(t, len(conf.ScrapeConfigs), 1)
 	require.Equal(t, len(conf.ScrapeConfigs[0].ProfilingConfig.PprofConfig), 6)
 	require.Equal(t, conf.ScrapeConfigs[0].ScrapeInterval.String(), "10s")

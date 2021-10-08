@@ -1,10 +1,1 @@
-scrape_configs:
-  - component_name: 'tidb'
-    scrape_interval: 10s
-    scrape_timeout: 120s
-    profiling_config:
-      pprof_config:
-        profile:
-          enabled: true
-          seconds: 5
-    targets: ['0.0.0.0:10080', '0.0.0.0:10081']
+pd_address: '0.0.0.0:2379'

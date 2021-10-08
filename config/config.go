@@ -29,14 +29,14 @@ const (
 )
 
 type Config struct {
-	Host              string                  `yaml:"host"`
-	Port              uint                    `yaml:"port"`
-	StorePath         string                  `yaml:"store_path"`
-	ConfigPath        string                  `yaml:"config_path"`
-	PDAddr            string                  `yaml:"pd_address"`
-	Log               Log                     `yaml:"log"`
-	ContinueProfiling ContinueProfilingConfig `yaml:"-,omitempty"`
-	ScrapeConfigs     []*ScrapeConfig         `yaml:"scrape_configs,omitempty"`
+	Host              string                  `yaml:"host" json:"host"`
+	Port              uint                    `yaml:"port" json:"port"`
+	StorePath         string                  `yaml:"store_path" json:"store_path"`
+	ConfigPath        string                  `yaml:"config_path" json:"config_path"`
+	PDAddr            string                  `yaml:"pd_address" json:"pd_address"`
+	Log               Log                     `yaml:"log" json:"log"`
+	ContinueProfiling ContinueProfilingConfig `yaml:"-" json:"-"`
+	ScrapeConfigs     []*ScrapeConfig         `yaml:"scrape_configs,omitempty" json:"scrape_configs"`
 	Security          Security                `yaml:"security" json:"security"`
 }
 

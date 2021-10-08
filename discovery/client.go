@@ -109,7 +109,7 @@ func (d *DiscoveryClient) getStoreScrapeTargets() (*config.ScrapeConfig, *config
 			if instance.Status != topology.ComponentStatusUp {
 				continue
 			}
-			addr := fmt.Sprintf("%v:%v", instance.IP, instance.Port)
+			addr := fmt.Sprintf("%v:%v", instance.IP, instance.StatusPort)
 			targets = append(targets, addr)
 		}
 		return targets
@@ -180,7 +180,7 @@ func secondToDuration(secs int) model.Duration {
 
 func buildDashboardConfig(pdAddr string, tlsConfig *tls.Config) *dashboard_config.Config {
 	return &dashboard_config.Config{
-		PDEndPoint:       pdAddr,
+		PDEndPoint:       fmt.Sprintf("http://%v", pdAddr),
 		ClusterTLSConfig: tlsConfig,
 	}
 }

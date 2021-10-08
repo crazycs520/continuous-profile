@@ -43,3 +43,5 @@ require (
 )
 
 replace github.com/dgraph-io/badger/v3 => github.com/crazycs520/badger/v3 v3.0.0-20210922063928-f25457a6a6fd
+
+replace github.com/pingcap/tidb-dashboard => /Users/cs/code/goread/src/github.com/pingcap/tidb-dashboard
