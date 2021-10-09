@@ -2,6 +2,7 @@ package scrape
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"github.com/crazycs520/continuous-profile/config"
@@ -9,7 +10,6 @@ import (
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
-	"github.com/google/pprof/profile"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
@@ -185,21 +185,21 @@ func (s *Scraper) scrape(ctx context.Context, w io.Writer) error {
 		return errors.Wrap(err, "failed to read body")
 	}
 
-	p, err := profile.ParseData(b)
+	data := s.tryUnzip(b)
+	_, err = w.Write(data)
+	return err
+}
+
+func (s *Scraper) tryUnzip(data []byte) []byte {
+	gz, err := gzip.NewReader(bytes.NewBuffer(data))
 	if err != nil {
-		_, err = w.Write(b)
-		return err
-		//return errors.Wrap(err, "failed to parse target's pprof profile")
+		return data
 	}
-
-	if len(p.Sample) == 0 {
-		return fmt.Errorf("empty %s profile from %s", s.target.profileType, s.req.URL.String())
+	v, err := ioutil.ReadAll(gz)
+	if err != nil {
+		return data
 	}
-
-	if err := p.WriteUncompressed(w); err != nil {
-		return fmt.Errorf("write profile: %w", err)
-	}
-	return nil
+	return v
 }
 
 // Target refers to a singular HTTP or HTTPS endpoint.

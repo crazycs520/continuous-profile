@@ -30,16 +30,17 @@ type DiscoveryClient struct {
 
 func NewDiscoveryClient(pdAddr string, tlsConfig *tls.Config) (*DiscoveryClient, error) {
 	cfg := buildDashboardConfig(pdAddr, tlsConfig)
-	cli := &DiscoveryClient{}
-	httpCli := httpc.NewHTTPClient(cli, cfg)
-	pdCli := pd.NewPDClient(cli, httpCli, cfg)
-	etcdCli, err := pd.NewEtcdClient(cli, cfg)
+	lc := &mockLifecycle{}
+	httpCli := httpc.NewHTTPClient(lc, cfg)
+	pdCli := pd.NewPDClient(lc, httpCli, cfg)
+	etcdCli, err := pd.NewEtcdClient(lc, cfg)
 	if err != nil {
 		return nil, err
 	}
-	cli.PDClient = pdCli
-	cli.EtcdClient = etcdCli
-	return cli, nil
+	return &DiscoveryClient{
+		PDClient:   pdCli,
+		EtcdClient: etcdCli,
+	}, nil
 }
 
 func (d *DiscoveryClient) GetAllScrapeTargets(ctx context.Context) ([]*config.ScrapeConfig, error) {
@@ -185,6 +186,8 @@ func buildDashboardConfig(pdAddr string, tlsConfig *tls.Config) *dashboard_confi
 	}
 }
 
-func (d *DiscoveryClient) Append(fx.Hook) {
+type mockLifecycle struct{}
+
+func (_ *mockLifecycle) Append(fx.Hook) {
 	return
 }
