@@ -94,13 +94,13 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 			start.Nanosecond()
 			ts := util.Millisecond(start)
 			err := sl.store.AddProfile(meta.ProfileTarget{
-				Tp:      sl.scraper.target.profileType,
-				Job:     sl.scraper.target.job,
-				Address: sl.scraper.target.address,
+				Kind:      sl.scraper.target.Kind,
+				Component: sl.scraper.target.Component,
+				Address:   sl.scraper.target.Address,
 			}, ts, buf.Bytes())
 			if err != nil {
 				fields := target.GetZapLogFields()
-				fields = append(fields, zap.Error(scrapeErr))
+				fields = append(fields, zap.Error(err))
 				logutil.BgLogger().Info("scrape failed", fields...)
 			} else {
 				fields := target.GetZapLogFields()
@@ -204,11 +204,9 @@ func (s *Scraper) tryUnzip(data []byte) []byte {
 
 // Target refers to a singular HTTP or HTTPS endpoint.
 type Target struct {
-	job         string
-	profileType string
+	meta.ProfileTarget
 
-	address string
-	header  map[string]string
+	header map[string]string
 	*url.URL
 
 	mu                 sync.RWMutex
@@ -217,10 +215,13 @@ type Target struct {
 	lastScrapeDuration time.Duration
 }
 
-func NewTarget(job, schema, address, profileType string, cfg *config.PprofProfilingConfig) *Target {
+func NewTarget(component, address, kind, schema string, cfg *config.PprofProfilingConfig) *Target {
 	t := &Target{
-		job:         job,
-		profileType: profileType,
+		ProfileTarget: meta.ProfileTarget{
+			Kind:      kind,
+			Component: component,
+			Address:   address,
+		},
 	}
 	vs := url.Values{}
 	for k, v := range cfg.Params {
@@ -230,11 +231,10 @@ func NewTarget(job, schema, address, profileType string, cfg *config.PprofProfil
 		vs.Add("seconds", strconv.Itoa(cfg.Seconds))
 	}
 
-	t.address = address
 	t.header = cfg.Header
 	t.URL = &url.URL{
 		Scheme:   schema,
-		Host:     t.address,
+		Host:     t.Address,
 		Path:     cfg.Path,
 		RawQuery: vs.Encode(),
 	}
@@ -247,8 +247,8 @@ func (t *Target) GetURLString() string {
 
 func (t *Target) GetZapLogFields() []zap.Field {
 	return []zap.Field{
-		zap.String("component", t.job),
-		zap.String("address", t.address),
-		zap.String("profile_type", t.profileType),
+		zap.String("component", t.Component),
+		zap.String("address", t.Address),
+		zap.String("kind", t.Kind),
 	}
 }

@@ -36,7 +36,7 @@ type Config struct {
 	PDAddr            string                  `yaml:"pd_address" json:"pd_address"`
 	Log               Log                     `yaml:"log" json:"log"`
 	ContinueProfiling ContinueProfilingConfig `yaml:"-" json:"-"`
-	ScrapeConfigs     []*ScrapeConfig         `yaml:"scrape_configs,omitempty" json:"scrape_configs"`
+	ScrapeConfigs     []*ScrapeConfig         `yaml:"scrape_configs,omitempty" json:"scrape_configs,omitempty"`
 	Security          Security                `yaml:"security" json:"security"`
 }
 

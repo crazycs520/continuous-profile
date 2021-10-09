@@ -60,7 +60,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 			fmt.Sprintf(`attachment; filename="profile"`+time.Now().Format("20060102150405")+".zip"))
 	zw := zip.NewWriter(w)
 	fn := func(pt meta.ProfileTarget, ts int64, data []byte) error {
-		fileName := fmt.Sprintf("%v_%v_%v_%v", pt.Tp, pt.Job, pt.Address, ts)
+		fileName := fmt.Sprintf("%v_%v_%v_%v", pt.Kind, pt.Component, pt.Address, ts)
 		fw, err := zw.Create(fileName)
 		if err != nil {
 			return err

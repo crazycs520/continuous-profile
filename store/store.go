@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,14 +13,24 @@ import (
 	"github.com/genjidb/genji/engine/badgerengine"
 	"github.com/genjidb/genji/types"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 	"sync"
+	"time"
 )
+
+const (
+	tableNamePrefix = "continuous_profiling"
+	metaTableName   = tableNamePrefix + "_targets_meta"
+)
+
+var ErrStoreIsClosed = errors.New("storage is closed")
 
 type ProfileStorage struct {
 	closed atomic.Bool
 	sync.Mutex
-	db        *genji.DB
-	metaCache map[meta.ProfileTarget]string
+	db          *genji.DB
+	metaCache   map[meta.ProfileTarget]meta.TargetInfo
+	idAllocator int64
 }
 
 func NewProfileStorage(storagePath string) (*ProfileStorage, error) {
@@ -39,24 +48,81 @@ func NewProfileStorage(storagePath string) (*ProfileStorage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ProfileStorage{
+	store := &ProfileStorage{
 		db:        db,
-		metaCache: make(map[meta.ProfileTarget]string),
-	}, nil
+		metaCache: make(map[meta.ProfileTarget]meta.TargetInfo),
+	}
+	err = store.init()
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
 }
 
-var ErrStoreIsClosed = errors.New("storage is closed")
+func (s *ProfileStorage) init() error {
+	err := s.initMetaTable()
+	if err != nil {
+		return err
+	}
+	err = s.loadMetaIntoCache()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ProfileStorage) initMetaTable() error {
+	// create meta table if not exists.
+	sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v (id INTEGER primary key, kind TEXT, component TEXT, address TEXT, last_scrape_ts INTEGER)", metaTableName)
+	return s.db.Exec(sql)
+}
+
+func (s *ProfileStorage) loadMetaIntoCache() error {
+	query := fmt.Sprintf("SELECT id, kind, component, address, last_scrape_ts FROM %v", metaTableName)
+	res, err := s.db.Query(query)
+	if err != nil {
+		return err
+	}
+	defer res.Close()
+
+	err = res.Iterate(func(d types.Document) error {
+		var id, ts int64
+		var kind, component, address string
+		err = document.Scan(d, &id, &kind, &component, &address, &ts)
+		if err != nil {
+			return err
+		}
+		s.rebaseID(id)
+		target := meta.ProfileTarget{
+			Kind:      kind,
+			Component: component,
+			Address:   address,
+		}
+		s.metaCache[target] = meta.TargetInfo{
+			ID:           id,
+			LastScrapeTs: ts,
+		}
+		logutil.BgLogger().Info("load target info into cache",
+			zap.String("component", target.Component),
+			zap.String("address", target.Address),
+			zap.String("kind", target.Kind),
+			zap.Int64("id", id),
+			zap.Int64("ts", ts))
+		return nil
+	})
+	return err
+}
 
 func (s *ProfileStorage) AddProfile(pt meta.ProfileTarget, ts int64, profile []byte) error {
 	if s.isClose() {
 		return ErrStoreIsClosed
 	}
-	tbName, err := s.prepareProfileTable(pt)
+	info, err := s.prepareProfileTable(pt)
 	if err != nil {
 		return err
 	}
 
-	sql := fmt.Sprintf("INSERT INTO %v (ts, data) VALUES (?, ?)", tbName)
+	sql := fmt.Sprintf("INSERT INTO %v (ts, data) VALUES (?, ?)", s.getProfileTableName(info))
 	s.Lock()
 	defer s.Unlock()
 	return s.db.Exec(sql, ts, profile)
@@ -76,9 +142,8 @@ func (s *ProfileStorage) QueryProfileList(param *meta.BasicQueryParam) ([]meta.P
 
 	var result []meta.ProfileList
 	args := []interface{}{param.Begin, param.End}
-	sqlBuf := bytes.NewBuffer(make([]byte, 0, 32))
 	for _, pt := range targets {
-		exist := s.isProfileTargetExist(pt)
+		info, exist := s.getTargetInfoFromCache(pt)
 		if !exist {
 			result = append(result, meta.ProfileList{
 				Target: pt,
@@ -86,9 +151,8 @@ func (s *ProfileStorage) QueryProfileList(param *meta.BasicQueryParam) ([]meta.P
 			continue
 		}
 
-		sqlBuf.Reset()
-		sqlBuf.WriteString(fmt.Sprintf("SELECT ts FROM %v WHERE ts >= ? and ts <= ?", s.getProfileTableName(pt)))
-		res, err := s.db.Query(sqlBuf.String(), args...)
+		query := fmt.Sprintf("SELECT ts FROM %v WHERE ts >= ? and ts <= ?", s.getProfileTableName(info))
+		res, err := s.db.Query(query, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -131,15 +195,13 @@ func (s *ProfileStorage) QueryProfileData(param *meta.BasicQueryParam, handleFn 
 	}
 
 	args := []interface{}{param.Begin, param.End}
-	sqlBuf := bytes.NewBuffer(make([]byte, 0, 32))
 	for _, pt := range targets {
-		exist := s.isProfileTargetExist(pt)
+		info, exist := s.getTargetInfoFromCache(pt)
 		if !exist {
 			continue
 		}
-		sqlBuf.Reset()
-		sqlBuf.WriteString(fmt.Sprintf("SELECT ts, data FROM %v WHERE ts >= ? and ts <= ?", s.getProfileTableName(pt)))
-		res, err := s.db.Query(sqlBuf.String(), args...)
+		query := fmt.Sprintf("SELECT ts, data FROM %v WHERE ts >= ? and ts <= ?", s.getProfileTableName(info))
+		res, err := s.db.Query(query, args...)
 		if err != nil {
 			return err
 		}
@@ -164,11 +226,11 @@ func (s *ProfileStorage) QueryProfileData(param *meta.BasicQueryParam, handleFn 
 	return nil
 }
 
-func (s *ProfileStorage) isProfileTargetExist(pt meta.ProfileTarget) bool {
+func (s *ProfileStorage) getTargetInfoFromCache(pt meta.ProfileTarget) (meta.TargetInfo, bool) {
 	s.Lock()
-	_, ok := s.metaCache[pt]
+	info, ok := s.metaCache[pt]
 	s.Unlock()
-	return ok
+	return info, ok
 }
 
 func (s *ProfileStorage) getAllTargets() []meta.ProfileTarget {
@@ -193,30 +255,51 @@ func (s *ProfileStorage) isClose() bool {
 	return s.closed.Load()
 }
 
-func (s *ProfileStorage) prepareProfileTable(pt meta.ProfileTarget) (string, error) {
+func (s *ProfileStorage) prepareProfileTable(pt meta.ProfileTarget) (meta.TargetInfo, error) {
 	s.Lock()
 	defer s.Unlock()
-	tbName, ok := s.metaCache[pt]
+	info, ok := s.metaCache[pt]
 	if ok {
-		return tbName, nil
+		return info, nil
 	}
 	var err error
-	tbName, err = s.createProfileTable(pt)
+	info, err = s.createProfileTable(pt)
 	if err != nil {
-		return tbName, err
+		return info, err
 	}
 	// update cache
-	s.metaCache[pt] = tbName
-	return tbName, nil
+	s.metaCache[pt] = info
+	return info, nil
 }
 
-func (s *ProfileStorage) createProfileTable(pt meta.ProfileTarget) (string, error) {
-	tbName := s.getProfileTableName(pt)
-	sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v (ts INTEGER PRIMARY KEY, data BLOB)", tbName)
-	err := s.db.Exec(sql)
-	return tbName, err
+func (s *ProfileStorage) createProfileTable(pt meta.ProfileTarget) (meta.TargetInfo, error) {
+	info := meta.TargetInfo{
+		ID:           s.allocID(),
+		LastScrapeTs: time.Now().Unix(),
+	}
+	sql := fmt.Sprintf("INSERT INTO %v (id, kind, component, address, last_scrape_ts) VALUES (?, ?, ?, ?, ?)", metaTableName)
+	err := s.db.Exec(sql, info.ID, pt.Kind, pt.Component, pt.Address, info.LastScrapeTs)
+	if err != nil {
+		return info, err
+	}
+	tbName := s.getProfileTableName(info)
+	sql = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v (ts INTEGER PRIMARY KEY, data BLOB)", tbName)
+	err = s.db.Exec(sql)
+	return info, err
 }
 
-func (s *ProfileStorage) getProfileTableName(pt meta.ProfileTarget) string {
-	return fmt.Sprintf("`profile_%v_%v_%v`", pt.Tp, pt.Job, pt.Address)
+func (s *ProfileStorage) getProfileTableName(info meta.TargetInfo) string {
+	return fmt.Sprintf("`%v_%v`", tableNamePrefix, info.ID)
+}
+
+func (s *ProfileStorage) rebaseID(id int64) {
+	if id <= s.idAllocator {
+		return
+	}
+	s.idAllocator = id
+}
+
+func (s *ProfileStorage) allocID() int64 {
+	s.idAllocator += 1
+	return s.idAllocator
 }

@@ -47,7 +47,7 @@ func main() {
 	}
 
 	manager := scrape.NewManager(storage, discoveryCli)
-	err = manager.InitScrape(cfg.ScrapeConfigs)
+	err = manager.InitScrape()
 	mustBeNil(err)
 
 	server := web.CreateHTTPServer(cfg.Host, cfg.Port, storage)

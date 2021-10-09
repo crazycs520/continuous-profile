@@ -39,9 +39,11 @@ func NewManager(store *store.ProfileStorage, discoveryCli *discovery.DiscoveryCl
 	}
 }
 
-func (m *Manager) InitScrape(scrapeConfigs []*config.ScrapeConfig) error {
+func (m *Manager) InitScrape() error {
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
+	cfg := config.GetGlobalConfig()
+	scrapeConfigs := cfg.ScrapeConfigs
 	if m.discoveryCli != nil {
 		scrapeConfigs, err = m.discoveryCli.GetAllScrapeTargets(ctx)
 		if err != nil {
@@ -55,7 +57,7 @@ func (m *Manager) InitScrape(scrapeConfigs []*config.ScrapeConfig) error {
 				if *profileConfig.Enabled == false {
 					continue
 				}
-				target := NewTarget(scfg.ComponentName, scfg.Scheme, addr, profileName, profileConfig)
+				target := NewTarget(scfg.ComponentName, addr, profileName, scfg.Scheme, profileConfig)
 				client, err := commonconfig.NewClientFromConfig(scfg.HTTPClientConfig, scfg.ComponentName)
 				if err != nil {
 					return err

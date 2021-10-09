@@ -1,9 +1,14 @@
 package meta
 
 type ProfileTarget struct {
-	Tp      string `json:"type"`
-	Job     string `json:"job"`
-	Address string `json:"address"`
+	Kind      string `json:"kind"`
+	Component string `json:"component"`
+	Address   string `json:"address"`
+}
+
+type TargetInfo struct {
+	ID           int64
+	LastScrapeTs int64
 }
 
 type BasicQueryParam struct {
