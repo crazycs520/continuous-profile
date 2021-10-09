@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/crazycs520/continuous-profile/meta"
+	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/dgraph-io/badger/v3/options"
@@ -56,6 +57,9 @@ func NewProfileStorage(storagePath string) (*ProfileStorage, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	go util.GoWithRecovery(store.doGCLoop, nil)
+
 	return store, nil
 }
 
@@ -123,8 +127,6 @@ func (s *ProfileStorage) AddProfile(pt meta.ProfileTarget, ts int64, profile []b
 	}
 
 	sql := fmt.Sprintf("INSERT INTO %v (ts, data) VALUES (?, ?)", s.getProfileTableName(info))
-	s.Lock()
-	defer s.Unlock()
 	return s.db.Exec(sql, ts, profile)
 }
 

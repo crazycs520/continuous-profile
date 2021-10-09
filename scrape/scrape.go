@@ -91,8 +91,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 				lastScrapeSize = buf.Len()
 			}
 
-			start.Nanosecond()
-			ts := util.Millisecond(start)
+			ts := util.GetTimeStamp(start)
 			err := sl.store.AddProfile(meta.ProfileTarget{
 				Kind:      sl.scraper.target.Kind,
 				Component: sl.scraper.target.Component,
@@ -102,9 +101,6 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 				fields := target.GetZapLogFields()
 				fields = append(fields, zap.Error(err))
 				logutil.BgLogger().Info("scrape failed", fields...)
-			} else {
-				fields := target.GetZapLogFields()
-				logutil.BgLogger().Info("scrape success", fields...)
 			}
 
 			//sl.target.health = HealthGood
