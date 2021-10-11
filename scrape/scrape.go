@@ -89,18 +89,17 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 		if scrapeErr == nil {
 			if buf.Len() > 0 {
 				lastScrapeSize = buf.Len()
-			}
-
-			ts := util.GetTimeStamp(start)
-			err := sl.store.AddProfile(meta.ProfileTarget{
-				Kind:      sl.scraper.target.Kind,
-				Component: sl.scraper.target.Component,
-				Address:   sl.scraper.target.Address,
-			}, ts, buf.Bytes())
-			if err != nil {
-				fields := target.GetZapLogFields()
-				fields = append(fields, zap.Error(err))
-				logutil.BgLogger().Info("scrape failed", fields...)
+				ts := util.GetTimeStamp(start)
+				err := sl.store.AddProfile(meta.ProfileTarget{
+					Kind:      sl.scraper.target.Kind,
+					Component: sl.scraper.target.Component,
+					Address:   sl.scraper.target.Address,
+				}, ts, buf.Bytes())
+				if err != nil {
+					fields := target.GetZapLogFields()
+					fields = append(fields, zap.Error(err))
+					logutil.BgLogger().Info("scrape failed", fields...)
+				}
 			}
 
 			//sl.target.health = HealthGood
@@ -152,6 +151,11 @@ func newScraper(target *Target, client *http.Client) Scraper {
 }
 
 func (s *Scraper) scrape(ctx context.Context, w io.Writer) error {
+	cfg := config.GetGlobalConfig()
+	if !cfg.ContinueProfiling.Enable {
+		return nil
+	}
+
 	if s.req == nil {
 		req, err := http.NewRequest("GET", s.target.GetURLString(), nil)
 		if err != nil {

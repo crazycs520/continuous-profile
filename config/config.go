@@ -19,6 +19,7 @@ const (
 	DefHost                          = "0.0.0.0"
 	DefPort                          = 10092
 	defStorePath                     = "data"
+	DefProfilingEnable               = true
 	DefProfilingIntervalSeconds      = 10
 	DefProfileSeconds                = 5
 	DefProfilingTimeoutSeconds       = 120
@@ -28,11 +29,12 @@ const (
 type Config struct {
 	Host              string                  `yaml:"host" json:"host"`
 	Port              uint                    `yaml:"port" json:"port"`
+	AdvertiseAddress  string                  `yaml:"advertise_address" json:"advertise_address"`
 	StorePath         string                  `yaml:"store_path" json:"store_path"`
 	ConfigPath        string                  `yaml:"config_path" json:"config_path"`
 	PDAddr            string                  `yaml:"pd_address" json:"pd_address"`
 	Log               Log                     `yaml:"log" json:"log"`
-	ContinueProfiling ContinueProfilingConfig `yaml:"-" json:"-"`
+	ContinueProfiling ContinueProfilingConfig `yaml:"-" json:"continue-profiling"`
 	Security          Security                `yaml:"security" json:"security"`
 }
 
@@ -41,7 +43,7 @@ var defaultConfig = Config{
 	Port:      DefPort,
 	StorePath: defStorePath,
 	ContinueProfiling: ContinueProfilingConfig{
-		Enable:               false,
+		Enable:               DefProfilingEnable,
 		ProfileSeconds:       DefProfileSeconds,
 		IntervalSeconds:      DefProfilingIntervalSeconds,
 		TimeoutSeconds:       DefProfilingTimeoutSeconds,
