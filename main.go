@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"github.com/crazycs520/continuous-profile/discovery"
 	"os"
@@ -40,15 +41,15 @@ func main() {
 	storage, err := store.NewProfileStorage(cfg.StorePath)
 	mustBeNil(err)
 
-	var discoveryCli *discovery.DiscoveryClient
-	if cfg.PDAddr != "" {
-		discoveryCli, err = discovery.NewDiscoveryClient(cfg.PDAddr, cfg.Security.GetTLSConfig())
-		mustBeNil(err)
+	if cfg.PDAddr == "" {
+		mustBeNil(errors.New("need specify PD address"))
 	}
-
-	manager := scrape.NewManager(storage, discoveryCli)
-	err = manager.InitScrape()
+	discoverer, err := discovery.NewTopologyDiscoverer(cfg.PDAddr, cfg.Security.GetTLSConfig())
 	mustBeNil(err)
+
+	manager := scrape.NewManager(storage, discoverer.Subscribe())
+	manager.Start()
+	discoverer.Start()
 
 	server := web.CreateHTTPServer(cfg.Host, cfg.Port, storage)
 	err = server.StartServer()

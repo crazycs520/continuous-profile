@@ -31,14 +31,12 @@ type ScrapeSuite struct {
 	ctx       context.Context
 	scrapeCtx context.Context
 	cancel    func()
-	stopped   chan struct{}
 }
 
 func newScrapeSuite(ctx context.Context, sc Scraper, store *store.ProfileStorage) *ScrapeSuite {
 	sl := &ScrapeSuite{
 		scraper: sc,
 		store:   store,
-		stopped: make(chan struct{}),
 		ctx:     ctx,
 	}
 	sl.scrapeCtx, sl.cancel = context.WithCancel(ctx)
@@ -54,7 +52,6 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 	case <-time.After(time.Duration(nextStart)):
 		// Continue after a scraping offset.
 	case <-sl.scrapeCtx.Done():
-		close(sl.stopped)
 		return
 	}
 
@@ -120,10 +117,8 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 
 		select {
 		case <-sl.ctx.Done():
-			close(sl.stopped)
 			return
 		case <-sl.scrapeCtx.Done():
-			close(sl.stopped)
 			return
 		case <-ticker.C:
 		}
@@ -134,7 +129,6 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 // returned. Cancel the context to stop all writes.
 func (sl *ScrapeSuite) stop() {
 	sl.cancel()
-	<-sl.stopped
 }
 
 type Scraper struct {

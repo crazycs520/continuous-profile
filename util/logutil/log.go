@@ -90,22 +90,22 @@ type Logger struct {
 	*zap.Logger
 }
 
-func (l *Logger) Errorf(s string, i ...interface{}) {
-	msg := fmt.Sprintf(s, i)
+func (l *Logger) Errorf(s string, args ...interface{}) {
+	msg := fmt.Sprintf(s, args...)
 	l.Error(msg)
 }
 
-func (l *Logger) Warningf(s string, i ...interface{}) {
-	msg := fmt.Sprintf(s, i)
+func (l *Logger) Warningf(s string, args ...interface{}) {
+	msg := fmt.Sprintf(s, args...)
 	l.Warn(msg)
 }
 
-func (l *Logger) Infof(s string, i ...interface{}) {
-	msg := fmt.Sprintf(s, i)
+func (l *Logger) Infof(s string, args ...interface{}) {
+	msg := fmt.Sprintf(s, args...)
 	l.Info(msg)
 }
 
-func (l *Logger) Debugf(s string, i ...interface{}) {
-	msg := fmt.Sprintf(s, i)
+func (l *Logger) Debugf(s string, args ...interface{}) {
+	msg := fmt.Sprintf(s, args...)
 	l.Debug(msg)
 }
