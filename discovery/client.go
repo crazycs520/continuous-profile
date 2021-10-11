@@ -11,7 +11,6 @@ import (
 	"github.com/pingcap/tidb-dashboard/pkg/httpc"
 	"github.com/pingcap/tidb-dashboard/pkg/pd"
 	"github.com/pingcap/tidb-dashboard/pkg/utils/topology"
-	"github.com/prometheus/common/model"
 	"go.etcd.io/etcd/clientv3"
 	"go.uber.org/fx"
 )
@@ -128,7 +127,6 @@ func (d *DiscoveryClient) newScrapeTargets(component string, profiling *config.P
 		ComponentName:   component,
 		ScrapeInterval:  secondToDuration(cfg.ContinueProfiling.IntervalSeconds),
 		ScrapeTimeout:   secondToDuration(cfg.ContinueProfiling.TimeoutSeconds),
-		Scheme:          cfg.GetHTTPScheme(),
 		ProfilingConfig: profiling,
 	}
 }
@@ -175,8 +173,8 @@ func NonGoAppProfilingConfig() *config.ProfilingConfig {
 	}
 }
 
-func secondToDuration(secs int) model.Duration {
-	return model.Duration(time.Duration(secs) * time.Second)
+func secondToDuration(secs int) time.Duration {
+	return time.Duration(secs) * time.Second
 }
 
 func buildDashboardConfig(pdAddr string, tlsConfig *tls.Config) *dashboard_config.Config {

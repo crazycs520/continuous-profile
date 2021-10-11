@@ -2,14 +2,12 @@ package scrape
 
 import (
 	"context"
-	"sync"
-	"time"
-
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/discovery"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
 	commonconfig "github.com/prometheus/common/config"
+	"sync"
 )
 
 // Manager maintains a set of scrape pools and manages start/stop cycles
@@ -40,25 +38,25 @@ func NewManager(store *store.ProfileStorage, discoveryCli *discovery.DiscoveryCl
 }
 
 func (m *Manager) InitScrape() error {
-	var err error
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := config.GetGlobalConfig()
-	scrapeConfigs := cfg.ScrapeConfigs
-	if m.discoveryCli != nil {
-		scrapeConfigs, err = m.discoveryCli.GetAllScrapeTargets(ctx)
-		if err != nil {
-			return err
-		}
+	if m.discoveryCli == nil {
+		return nil
+	}
+	scrapeConfigs, err := m.discoveryCli.GetAllScrapeTargets(ctx)
+	if err != nil {
+		return err
 	}
 	m.cancel = cancel
+	cfg := config.GetGlobalConfig()
+	httpCfg := cfg.Security.GetHTTPClientConfig()
 	for _, scfg := range scrapeConfigs {
 		for _, addr := range scfg.Targets {
 			for profileName, profileConfig := range scfg.ProfilingConfig.PprofConfig {
 				if *profileConfig.Enabled == false {
 					continue
 				}
-				target := NewTarget(scfg.ComponentName, addr, profileName, scfg.Scheme, profileConfig)
-				client, err := commonconfig.NewClientFromConfig(scfg.HTTPClientConfig, scfg.ComponentName)
+				target := NewTarget(scfg.ComponentName, addr, profileName, cfg.GetHTTPScheme(), profileConfig)
+				client, err := commonconfig.NewClientFromConfig(httpCfg, scfg.ComponentName)
 				if err != nil {
 					return err
 				}
@@ -70,8 +68,8 @@ func (m *Manager) InitScrape() error {
 					profileType: profileName,
 				}
 
-				interval := time.Duration(scfg.ScrapeInterval)
-				timeout := time.Duration(scfg.ScrapeTimeout)
+				interval := scfg.ScrapeInterval
+				timeout := scfg.ScrapeTimeout
 				m.wg.Add(1)
 				go util.GoWithRecovery(func() {
 					defer m.wg.Done()
