@@ -90,6 +90,8 @@ github.com/cpuguy83/go-md2man v1.0.10/go.mod h1:SmD6nW6nTyfqj6ABTjUi3V3JVMnlJmwc
 github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
 github.com/crazycs520/badger/v3 v3.0.0-20210922063928-f25457a6a6fd h1:t8jycqK7ctkFN8SDCWBWvJnpEZjS8wSrUaPKJB9qBog=
 github.com/crazycs520/badger/v3 v3.0.0-20210922063928-f25457a6a6fd/go.mod h1:dULbq6ehJ5K0cGW/1TQ9iSfUk0gbSiToDWmWmTsJ53E=
+github.com/crazycs520/tidb-dashboard v0.0.0-20211009060758-44122db89f8c h1:ViwgU2l2Ff6wnDsxKFgfEy7OU2KjmktCmez9i4QAKR4=
+github.com/crazycs520/tidb-dashboard v0.0.0-20211009060758-44122db89f8c/go.mod h1:OCXbZTBTIMRcIt0jFsuCakZP+goYRv6IjawKbwLS2TQ=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
