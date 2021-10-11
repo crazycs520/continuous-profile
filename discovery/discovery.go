@@ -148,7 +148,7 @@ func (d *TopologyDiscoverer) getPDComponents(ctx context.Context) ([]Component, 
 			continue
 		}
 		components = append(components, Component{
-			Name:       ComponentTiDB,
+			Name:       ComponentPD,
 			IP:         instance.IP,
 			Port:       instance.Port,
 			StatusPort: instance.Port,
@@ -163,20 +163,20 @@ func (d *TopologyDiscoverer) getStoreComponents(ctx context.Context) ([]Componen
 		return nil, err
 	}
 	components := make([]Component, 0, len(tikvInstances)+len(tiflashInstances))
-	getComponents := func(instances []topology.StoreInfo) {
+	getComponents := func(instances []topology.StoreInfo, name string) {
 		for _, instance := range instances {
 			if instance.Status != topology.ComponentStatusUp {
 				continue
 			}
 			components = append(components, Component{
-				Name:       ComponentTiDB,
+				Name:       name,
 				IP:         instance.IP,
 				Port:       instance.Port,
 				StatusPort: instance.StatusPort,
 			})
 		}
 	}
-	getComponents(tikvInstances)
-	getComponents(tiflashInstances)
+	getComponents(tikvInstances, ComponentTiKV)
+	getComponents(tiflashInstances, ComponentTiFlash)
 	return components, nil
 }

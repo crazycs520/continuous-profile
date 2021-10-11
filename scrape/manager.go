@@ -63,12 +63,13 @@ func (m *Manager) run(ctx context.Context) {
 	oldContinueProfilingCfg := config.GetGlobalConfig().ContinueProfiling
 	for {
 		components := <-m.topoSubScribe
-		newMap := buildMap(components)
 
 		newContinueProfilingCfg := config.GetGlobalConfig().ContinueProfiling
 		configChanged := oldContinueProfilingCfg != newContinueProfilingCfg
-		// close for old components
+		oldContinueProfilingCfg = newContinueProfilingCfg
 
+		newMap := buildMap(components)
+		// close for old components
 		for comp := range oldMap {
 			_, exist := newMap[comp]
 			if exist && !configChanged {
@@ -90,7 +91,7 @@ func (m *Manager) run(ctx context.Context) {
 					zap.String("address", comp.IP+":"+strconv.Itoa(int(comp.StatusPort))))
 			}
 		}
-
+		oldMap = newMap
 	}
 }
 

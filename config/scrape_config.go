@@ -27,4 +27,3 @@ type PprofProfilingConfig struct {
 	Header  map[string]string `yaml:"header,omitempty"`
 	Params  map[string]string `yaml:"params,omitempty"`
 }
-
