@@ -51,7 +51,7 @@ func main() {
 	manager.Start()
 	discoverer.Start()
 
-	server := web.CreateHTTPServer(cfg.Host, cfg.Port, storage)
+	server := web.CreateHTTPServer(cfg.Host, cfg.Port, storage, manager)
 	err = server.StartServer()
 	mustBeNil(err)
 

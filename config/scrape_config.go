@@ -21,7 +21,6 @@ type ProfilingConfig struct {
 type PprofConfig map[string]*PprofProfilingConfig
 
 type PprofProfilingConfig struct {
-	Enabled *bool             `yaml:"enabled,omitempty"`
 	Path    string            `yaml:"path,omitempty"`
 	Seconds int               `yaml:"seconds"`
 	Header  map[string]string `yaml:"header,omitempty"`

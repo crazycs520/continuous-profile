@@ -133,24 +133,19 @@ func (d *DiscoveryClient) newScrapeTargets(component string, profiling *config.P
 
 func GoAppProfilingConfig() *config.ProfilingConfig {
 	cfg := config.GetGlobalConfig().ContinueProfiling
-	trueValue := true
 	return &config.ProfilingConfig{
 		PprofConfig: config.PprofConfig{
 			"allocs": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
-				Path:    "/debug/pprof/allocs",
+				Path: "/debug/pprof/allocs",
 			},
 			"goroutine": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
-				Path:    "/debug/pprof/goroutine",
-				Params:  map[string]string{"debug": "2"},
+				Path:   "/debug/pprof/goroutine",
+				Params: map[string]string{"debug": "2"},
 			},
 			"mutex": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
-				Path:    "/debug/pprof/mutex",
+				Path: "/debug/pprof/mutex",
 			},
 			"profile": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
 				Path:    "/debug/pprof/profile",
 				Seconds: cfg.ProfileSeconds,
 			},
@@ -160,11 +155,9 @@ func GoAppProfilingConfig() *config.ProfilingConfig {
 
 func NonGoAppProfilingConfig() *config.ProfilingConfig {
 	cfg := config.GetGlobalConfig().ContinueProfiling
-	trueValue := true
 	return &config.ProfilingConfig{
 		PprofConfig: config.PprofConfig{
 			"profile": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
 				Path:    "/debug/pprof/profile",
 				Seconds: cfg.ProfileSeconds,
 				Header:  map[string]string{"Content-Type": "application/protobuf"},

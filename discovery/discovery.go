@@ -25,10 +25,10 @@ type TopologyDiscoverer struct {
 }
 
 type Component struct {
-	Name       string
-	IP         string
-	Port       uint
-	StatusPort uint
+	Name       string `json:"name"`
+	IP         string `json:"ip"`
+	Port       uint   `json:"port"`
+	StatusPort uint   `json:"status_port"`
 }
 
 type Subscriber = chan []Component

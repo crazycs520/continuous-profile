@@ -11,6 +11,7 @@ import (
 	"github.com/crazycs520/continuous-profile/util/logutil"
 	commonconfig "github.com/prometheus/common/config"
 	"go.uber.org/zap"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -19,10 +20,14 @@ import (
 // Manager maintains a set of scrape pools and manages start/stop cycles
 // when receiving new target groups form the discovery manager.
 type Manager struct {
-	store         *store.ProfileStorage
-	topoSubScribe discovery.Subscriber
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
+	store          *store.ProfileStorage
+	topoSubScribe  discovery.Subscriber
+	reloadCh       chan struct{}
+	curComponents  map[discovery.Component]struct{}
+	lastComponents map[discovery.Component]struct{}
+
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 
 	graceShut chan struct{}
 
@@ -35,11 +40,14 @@ type Manager struct {
 // NewManager is the Manager constructor
 func NewManager(store *store.ProfileStorage, topoSubScribe discovery.Subscriber) *Manager {
 	return &Manager{
-		store:         store,
-		topoSubScribe: topoSubScribe,
-		scrapeSuites:  make(map[meta.ProfileTarget]*ScrapeSuite),
-		graceShut:     make(chan struct{}),
-		triggerReload: make(chan struct{}, 1),
+		store:          store,
+		topoSubScribe:  topoSubScribe,
+		reloadCh:       make(chan struct{}, 10),
+		curComponents:  map[discovery.Component]struct{}{},
+		lastComponents: map[discovery.Component]struct{}{},
+		scrapeSuites:   make(map[meta.ProfileTarget]*ScrapeSuite),
+		graceShut:      make(chan struct{}),
+		triggerReload:  make(chan struct{}, 1),
 	}
 }
 
@@ -51,6 +59,30 @@ func (m *Manager) Start() {
 	}, nil)
 }
 
+func (m *Manager) NotifyReload() {
+	select {
+	case m.reloadCh <- struct{}{}:
+	default:
+	}
+}
+
+func (m *Manager) GetCurrentScrapeComponents() []discovery.Component {
+	components := make([]discovery.Component, 0, len(m.curComponents))
+	for comp := range m.curComponents {
+		components = append(components, comp)
+	}
+	sort.Slice(components, func(i, j int) bool {
+		if components[i].Name != components[j].Name {
+			return components[i].Name < components[j].Name
+		}
+		if components[i].IP != components[j].IP {
+			return components[i].IP < components[j].IP
+		}
+		return components[i].Port < components[j].Port
+	})
+	return components
+}
+
 func (m *Manager) run(ctx context.Context) {
 	buildMap := func(components []discovery.Component) map[discovery.Component]struct{} {
 		m := make(map[discovery.Component]struct{}, len(components))
@@ -59,51 +91,63 @@ func (m *Manager) run(ctx context.Context) {
 		}
 		return m
 	}
-	var oldMap map[discovery.Component]struct{}
-	oldContinueProfilingCfg := config.GetGlobalConfig().ContinueProfiling
+	oldCfg := config.GetGlobalConfig().ContinueProfiling
 	for {
-		components := <-m.topoSubScribe
-
-		newContinueProfilingCfg := config.GetGlobalConfig().ContinueProfiling
-		configChanged := oldContinueProfilingCfg != newContinueProfilingCfg
-		oldContinueProfilingCfg = newContinueProfilingCfg
-
-		newMap := buildMap(components)
-		// close for old components
-		for comp := range oldMap {
-			_, exist := newMap[comp]
-			if exist && !configChanged {
-				continue
-			}
-			m.stopScrape(comp)
+		select {
+		case <-ctx.Done():
+			return
+		case components := <-m.topoSubScribe:
+			m.lastComponents = buildMap(components)
+		case <-m.reloadCh:
+			break
 		}
 
-		//start for new component.
-		for comp := range newMap {
-			_, exist := oldMap[comp]
-			if exist {
-				continue
-			}
-			err := m.startScrape(ctx, comp, newContinueProfilingCfg)
-			if err != nil {
-				logutil.BgLogger().Error("start scrape failed",
-					zap.String("component", comp.Name),
-					zap.String("address", comp.IP+":"+strconv.Itoa(int(comp.StatusPort))))
-			}
+		newCfg := config.GetGlobalConfig().ContinueProfiling
+		m.reload(ctx, oldCfg, newCfg)
+		oldCfg = newCfg
+	}
+}
+
+func (m *Manager) reload(ctx context.Context, oldCfg, newCfg config.ContinueProfilingConfig) {
+	configChanged := oldCfg != newCfg
+	// close for old components
+	for comp := range m.curComponents {
+		_, exist := m.lastComponents[comp]
+		if exist && !configChanged {
+			continue
 		}
-		oldMap = newMap
+		m.stopScrape(comp)
+	}
+
+	// close for old components
+	if !newCfg.Enable {
+		return
+	}
+
+	//start for new component.
+	for comp := range m.lastComponents {
+		_, exist := m.curComponents[comp]
+		if exist && !configChanged {
+			continue
+		}
+		err := m.startScrape(ctx, comp, newCfg)
+		if err != nil {
+			logutil.BgLogger().Error("start scrape failed",
+				zap.String("component", comp.Name),
+				zap.String("address", comp.IP+":"+strconv.Itoa(int(comp.StatusPort))))
+		}
 	}
 }
 
 func (m *Manager) startScrape(ctx context.Context, component discovery.Component, continueProfilingCfg config.ContinueProfilingConfig) error {
+	if !continueProfilingCfg.Enable {
+		return nil
+	}
 	profilingConfig := m.getProfilingConfig(component)
 	cfg := config.GetGlobalConfig()
 	httpCfg := cfg.Security.GetHTTPClientConfig()
 	addr := fmt.Sprintf("%v:%v", component.IP, component.StatusPort)
 	for profileName, profileConfig := range profilingConfig.PprofConfig {
-		if *profileConfig.Enabled == false {
-			continue
-		}
 		target := NewTarget(component.Name, addr, profileName, cfg.GetHTTPScheme(), profileConfig)
 		client, err := commonconfig.NewClientFromConfig(httpCfg, component.Name)
 		if err != nil {
@@ -126,6 +170,7 @@ func (m *Manager) startScrape(ctx context.Context, component discovery.Component
 		}, nil)
 		m.scrapeSuites[key] = scrapeSuite
 	}
+	m.curComponents[component] = struct{}{}
 	logutil.BgLogger().Info("start component scrape",
 		zap.String("component", component.Name),
 		zap.String("address", addr))
@@ -133,6 +178,7 @@ func (m *Manager) startScrape(ctx context.Context, component discovery.Component
 }
 
 func (m *Manager) stopScrape(component discovery.Component) {
+	delete(m.curComponents, component)
 	addr := fmt.Sprintf("%v:%v", component.IP, component.StatusPort)
 	logutil.BgLogger().Info("stop component scrape",
 		zap.String("component", component.Name),
@@ -220,24 +266,19 @@ func (m *Manager) Close() error {
 
 func goAppProfilingConfig() *config.ProfilingConfig {
 	cfg := config.GetGlobalConfig().ContinueProfiling
-	trueValue := true
 	return &config.ProfilingConfig{
 		PprofConfig: config.PprofConfig{
 			"allocs": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
-				Path:    "/debug/pprof/allocs",
+				Path: "/debug/pprof/allocs",
 			},
 			"goroutine": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
-				Path:    "/debug/pprof/goroutine",
-				Params:  map[string]string{"debug": "2"},
+				Path:   "/debug/pprof/goroutine",
+				Params: map[string]string{"debug": "2"},
 			},
 			"mutex": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
-				Path:    "/debug/pprof/mutex",
+				Path: "/debug/pprof/mutex",
 			},
 			"profile": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
 				Path:    "/debug/pprof/profile",
 				Seconds: cfg.ProfileSeconds,
 			},
@@ -247,11 +288,9 @@ func goAppProfilingConfig() *config.ProfilingConfig {
 
 func nonGoAppProfilingConfig() *config.ProfilingConfig {
 	cfg := config.GetGlobalConfig().ContinueProfiling
-	trueValue := true
 	return &config.ProfilingConfig{
 		PprofConfig: config.PprofConfig{
 			"profile": &config.PprofProfilingConfig{
-				Enabled: &trueValue,
 				Path:    "/debug/pprof/profile",
 				Seconds: cfg.ProfileSeconds,
 				Header:  map[string]string{"Content-Type": "application/protobuf"},

@@ -13,6 +13,10 @@ import (
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodGet:
+		cfg := config.GetGlobalConfig()
+		writeData(w, cfg)
+		return
 	case http.MethodPost:
 	default:
 		serveError(w, http.StatusBadRequest, "only support post")
@@ -20,7 +24,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.handleConfigModify(w, r)
 	if err != nil {
-		logutil.BgLogger().Info("handle continuous profiling config modify failed", zap.Error(err))
+		logutil.BgLogger().Info("handle config modify failed", zap.Error(err))
 		serveError(w, http.StatusBadRequest, "parse query param error: "+err.Error())
 		return
 	}
@@ -31,6 +35,22 @@ func (s *Server) handleConfigModify(w http.ResponseWriter, r *http.Request) erro
 	if err := json.NewDecoder(r.Body).Decode(&reqNested); err != nil {
 		return err
 	}
+	for k, v := range reqNested {
+		switch k {
+		case "continuous_profiling":
+			m, ok := v.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("%v config value is invalid: %v", k, v)
+			}
+			return s.handleContinueProfilingConfigModify(w, m)
+		default:
+			return fmt.Errorf("config %v not support modify or unknow", k)
+		}
+	}
+	return nil
+}
+
+func (s *Server) handleContinueProfilingConfigModify(w http.ResponseWriter, reqNested map[string]interface{}) error {
 	cfg := config.GetGlobalConfig()
 	current, err := json.Marshal(cfg.ContinueProfiling)
 	if err != nil {
@@ -42,16 +62,19 @@ func (s *Server) handleConfigModify(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 
-	for k, v := range reqNested {
-		old, ok := currentNested[k]
+	for k, newValue := range reqNested {
+		oldValue, ok := currentNested[k]
 		if !ok {
 			return fmt.Errorf("unknow config `%v`", k)
 		}
-		currentNested[k] = v
+		if oldValue == newValue {
+			continue
+		}
+		currentNested[k] = newValue
 		logutil.BgLogger().Info("handle continuous profiling config modify",
 			zap.String("name", k),
-			zap.Reflect("old-value", old),
-			zap.Reflect("new-value", v))
+			zap.Reflect("old-value", oldValue),
+			zap.Reflect("new-value", newValue))
 	}
 
 	data, err := json.Marshal(currentNested)
@@ -66,6 +89,7 @@ func (s *Server) handleConfigModify(w http.ResponseWriter, r *http.Request) erro
 
 	cfg.ContinueProfiling = newCfg
 	config.StoreGlobalConfig(cfg)
+	s.scraper.NotifyReload()
 	writeData(w, "success!")
 	return nil
 }

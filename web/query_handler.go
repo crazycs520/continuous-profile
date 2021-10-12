@@ -80,6 +80,11 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleComponents(w http.ResponseWriter, r *http.Request) {
+	components := s.scraper.GetCurrentScrapeComponents()
+	writeData(w, components)
+}
+
 func (s *Server) getQueryParamFromBody(r *http.Request) (*meta.BasicQueryParam, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {

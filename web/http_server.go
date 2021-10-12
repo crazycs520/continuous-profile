@@ -2,11 +2,10 @@ package web
 
 import (
 	"fmt"
-	"github.com/crazycs520/continuous-profile/config"
+	"github.com/crazycs520/continuous-profile/scrape"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
-	"github.com/pingcap/fn"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
@@ -19,12 +18,14 @@ type Server struct {
 	address    string
 	httpServer *http.Server
 	store      *store.ProfileStorage
+	scraper    *scrape.Manager
 }
 
-func CreateHTTPServer(host string, port uint, store *store.ProfileStorage) *Server {
+func CreateHTTPServer(host string, port uint, store *store.ProfileStorage, scraper *scrape.Manager) *Server {
 	return &Server{
 		address: fmt.Sprintf("%v:%v", host, port),
 		store:   store,
+		scraper: scraper,
 	}
 }
 
@@ -54,15 +55,12 @@ func (s *Server) Close() error {
 
 func (s *Server) createMux() *http.ServeMux {
 	router := mux.NewRouter()
-	router.Handle("/config", fn.Wrap(func() (*config.Config, error) {
-		return config.GetGlobalConfig(), nil
-	}))
+	router.HandleFunc("/config", s.handleConfig)
 
 	// continuous profiling api
 	router.HandleFunc("/continuous-profiling/list", s.handleQueryList)
 	router.HandleFunc("/continuous-profiling/download", s.handleDownload)
-	router.HandleFunc("/continuous-profiling/download", s.handleDownload)
-	router.HandleFunc("/continuous-profiling/config", s.handleConfig)
+	router.HandleFunc("/continuous-profiling/components", s.handleComponents)
 
 	serverMux := http.NewServeMux()
 	serverMux.Handle("/", router)
