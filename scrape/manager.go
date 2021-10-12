@@ -3,6 +3,11 @@ package scrape
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
+
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/discovery"
 	"github.com/crazycs520/continuous-profile/meta"
@@ -11,10 +16,6 @@ import (
 	"github.com/crazycs520/continuous-profile/util/logutil"
 	commonconfig "github.com/prometheus/common/config"
 	"go.uber.org/zap"
-	"sort"
-	"strconv"
-	"sync"
-	"time"
 )
 
 // Manager maintains a set of scrape pools and manages start/stop cycles
@@ -29,12 +30,7 @@ type Manager struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	graceShut chan struct{}
-
-	mtxScrape    sync.Mutex // Guards the fields below.
 	scrapeSuites map[meta.ProfileTarget]*ScrapeSuite
-
-	triggerReload chan struct{}
 }
 
 // NewManager is the Manager constructor
@@ -46,8 +42,6 @@ func NewManager(store *store.ProfileStorage, topoSubScribe discovery.Subscriber)
 		curComponents:  map[discovery.Component]struct{}{},
 		lastComponents: map[discovery.Component]struct{}{},
 		scrapeSuites:   make(map[meta.ProfileTarget]*ScrapeSuite),
-		graceShut:      make(chan struct{}),
-		triggerReload:  make(chan struct{}, 1),
 	}
 }
 
@@ -206,51 +200,6 @@ func (m *Manager) getProfilingConfig(component discovery.Component) *config.Prof
 		return nonGoAppProfilingConfig()
 	}
 }
-
-//func (m *Manager) InitScrape() error {
-//	ctx, cancel := context.WithCancel(context.Background())
-//	if m.discoveryCli == nil {
-//		return nil
-//	}
-//	scrapeConfigs, err := m.discoveryCli.GetAllScrapeTargets(ctx)
-//	if err != nil {
-//		return err
-//	}
-//	m.cancel = cancel
-//	cfg := config.GetGlobalConfig()
-//	httpCfg := cfg.Security.GetHTTPClientConfig()
-//	for _, scfg := range scrapeConfigs {
-//		for _, addr := range scfg.Targets {
-//			for profileName, profileConfig := range scfg.ProfilingConfig.PprofConfig {
-//				if *profileConfig.Enabled == false {
-//					continue
-//				}
-//				target := NewTarget(scfg.ComponentName, addr, profileName, cfg.GetHTTPScheme(), profileConfig)
-//				client, err := commonconfig.NewClientFromConfig(httpCfg, scfg.ComponentName)
-//				if err != nil {
-//					return err
-//				}
-//				scrape := newScraper(target, client)
-//				scrapeSuite := newScrapeSuite(ctx, scrape, m.store)
-//				key := scrapeTargetKey{
-//					component:   scfg.ComponentName,
-//					address:     addr,
-//					profileType: profileName,
-//				}
-//
-//				interval := scfg.ScrapeInterval
-//				timeout := scfg.ScrapeTimeout
-//				m.wg.Add(1)
-//				go util.GoWithRecovery(func() {
-//					defer m.wg.Done()
-//					scrapeSuite.run(interval, timeout)
-//				}, nil)
-//				m.scrapeSuites[key] = scrapeSuite
-//			}
-//		}
-//	}
-//	return nil
-//}
 
 func (m *Manager) Close() error {
 	if m.cancel != nil {

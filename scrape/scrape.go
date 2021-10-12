@@ -5,6 +5,14 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"strconv"
+	"sync"
+	"time"
+
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/store"
@@ -13,13 +21,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"strconv"
-	"sync"
-	"time"
 )
 
 type ScrapeSuite struct {
@@ -46,7 +47,10 @@ func newScrapeSuite(ctx context.Context, sc Scraper, store *store.ProfileStorage
 
 func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 	target := sl.scraper.target
-	logutil.BgLogger().Info("scraper start to run", target.GetZapLogFields()...)
+	logutil.BgLogger().Info("scraper start to run",
+		zap.String("component", target.Component),
+		zap.String("address", target.Address),
+		zap.String("kind", target.Kind))
 	nextStart := time.Now().UnixNano() % int64(interval)
 	select {
 	case <-time.After(time.Duration(nextStart)):
@@ -62,15 +66,6 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 	lastScrapeSize := 0
 
 	for {
-		//select {
-		//case <-sl.ctx.Done():
-		//	close(sl.stopped)
-		//	return
-		//case <-sl.scrapeCtx.Done():
-		//	break mainLoop
-		//default:
-		//}
-
 		start := time.Now()
 		if lastScrapeSize > 0 && buf.Cap() > 2*lastScrapeSize {
 			// shrink the buffer size.
@@ -92,28 +87,24 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 					Component: sl.scraper.target.Component,
 					Address:   sl.scraper.target.Address,
 				}, ts, buf.Bytes())
-				if err != nil {
-					fields := target.GetZapLogFields()
-					fields = append(fields, zap.Error(err))
-					logutil.BgLogger().Info("scrape failed", fields...)
+
+				if err == nil {
+					sl.scraper.target.lastScrape = start
+				} else {
+					logutil.BgLogger().Error("save scrape data failed",
+						zap.String("component", target.Component),
+						zap.String("address", target.Address),
+						zap.String("kind", target.Kind),
+						zap.Error(err))
 				}
 			}
-
-			//sl.target.health = HealthGood
-			//sl.target.lastScrapeDuration = time.Since(start)
-			//sl.target.lastError = nil
 		} else {
-			//level.Debug(sl.l).Log("msg", "Scrape failed", "err", scrapeErr.Error())
-			fields := target.GetZapLogFields()
-			fields = append(fields, zap.Error(scrapeErr))
-			logutil.BgLogger().Info("scrape failed", fields...)
-
-			//sl.target.health = HealthBad
-			//sl.target.lastScrapeDuration = time.Since(start)
-			//sl.target.lastError = scrapeErr
+			logutil.BgLogger().Error("scrape failed",
+				zap.String("component", target.Component),
+				zap.String("address", target.Address),
+				zap.String("kind", target.Kind),
+				zap.Error(scrapeErr))
 		}
-
-		sl.scraper.target.lastScrape = start
 
 		select {
 		case <-sl.ctx.Done():
@@ -237,12 +228,4 @@ func NewTarget(component, address, kind, schema string, cfg *config.PprofProfili
 
 func (t *Target) GetURLString() string {
 	return t.URL.String()
-}
-
-func (t *Target) GetZapLogFields() []zap.Field {
-	return []zap.Field{
-		zap.String("component", t.Component),
-		zap.String("address", t.Address),
-		zap.String("kind", t.Kind),
-	}
 }
