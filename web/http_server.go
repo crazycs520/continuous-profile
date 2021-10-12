@@ -2,17 +2,17 @@ package web
 
 import (
 	"fmt"
+	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/fn"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"net/http/pprof"
 
-	"github.com/crazycs520/continuous-profile/config"
 	"github.com/gorilla/mux"
-	"github.com/pingcap/fn"
 )
 
 type Server struct {
@@ -57,8 +57,12 @@ func (s *Server) createMux() *http.ServeMux {
 	router.Handle("/config", fn.Wrap(func() (*config.Config, error) {
 		return config.GetGlobalConfig(), nil
 	}))
-	router.HandleFunc("/list", s.handleQueryList)
-	router.HandleFunc("/download", s.handleDownload)
+
+	// continuous profiling api
+	router.HandleFunc("/continuous-profiling/list", s.handleQueryList)
+	router.HandleFunc("/continuous-profiling/download", s.handleDownload)
+	router.HandleFunc("/continuous-profiling/download", s.handleDownload)
+	router.HandleFunc("/continuous-profiling/config", s.handleConfig)
 
 	serverMux := http.NewServeMux()
 	serverMux.Handle("/", router)

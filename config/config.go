@@ -34,7 +34,7 @@ type Config struct {
 	ConfigPath        string                  `yaml:"config_path" json:"config_path"`
 	PDAddr            string                  `yaml:"pd_address" json:"pd_address"`
 	Log               Log                     `yaml:"log" json:"log"`
-	ContinueProfiling ContinueProfilingConfig `yaml:"-" json:"continue-profiling"`
+	ContinueProfiling ContinueProfilingConfig `yaml:"-" json:"continuous_profiling"`
 	Security          Security                `yaml:"security" json:"security"`
 }
 
@@ -56,11 +56,11 @@ var defaultConfig = Config{
 }
 
 type ContinueProfilingConfig struct {
-	Enable               bool
-	ProfileSeconds       int
-	IntervalSeconds      int
-	TimeoutSeconds       int
-	DataRetentionSeconds int
+	Enable               bool `json:"enable"`
+	ProfileSeconds       int  `json:"profile_seconds"`
+	IntervalSeconds      int  `json:"interval_seconds"`
+	TimeoutSeconds       int  `json:"timeout_seconds"`
+	DataRetentionSeconds int  `json:"data_retention_seconds"`
 }
 
 var globalConf atomic.Value
@@ -145,10 +145,10 @@ func (l *Log) ToLogConfig() *logutil.LogConfig {
 }
 
 type Security struct {
-	SSLCA     string `yaml:"ssl-ca" json:"cluster-ssl-ca"`
-	SSLCert   string `yaml:"ssl-cert" json:"cluster-ssl-cert"`
-	SSLKey    string `yaml:"ssl-key" json:"cluster-ssl-key"`
-	tlsConfig *tls.Config
+	SSLCA     string      `yaml:"ssl_ca" json:"ssl_ca"`
+	SSLCert   string      `yaml:"ssl_cert" json:"ssl_cert"`
+	SSLKey    string      `yaml:"ssl_key" json:"ssl_key"`
+	tlsConfig *tls.Config `yaml:"-" json:"-"`
 }
 
 func (s *Security) GetTLSConfig() *tls.Config {
