@@ -3,18 +3,28 @@ package discovery
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
+	"sync"
+	"time"
+
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
+	dashboard_config "github.com/pingcap/tidb-dashboard/pkg/config"
 	"github.com/pingcap/tidb-dashboard/pkg/httpc"
 	"github.com/pingcap/tidb-dashboard/pkg/pd"
 	"github.com/pingcap/tidb-dashboard/pkg/utils/topology"
 	"go.etcd.io/etcd/clientv3"
+	"go.uber.org/fx"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
-const discoverInterval = time.Second * 30
+const (
+	discoverInterval = time.Second * 30
+	ComponentTiDB    = "tidb"
+	ComponentTiKV    = "tikv"
+	ComponentTiFlash = "tiflash"
+	ComponentPD      = "pd"
+)
 
 type TopologyDiscoverer struct {
 	sync.Mutex
@@ -179,4 +189,17 @@ func (d *TopologyDiscoverer) getStoreComponents(ctx context.Context) ([]Componen
 	getComponents(tikvInstances, ComponentTiKV)
 	getComponents(tiflashInstances, ComponentTiFlash)
 	return components, nil
+}
+
+func buildDashboardConfig(pdAddr string, tlsConfig *tls.Config) *dashboard_config.Config {
+	return &dashboard_config.Config{
+		PDEndPoint:       fmt.Sprintf("http://%v", pdAddr),
+		ClusterTLSConfig: tlsConfig,
+	}
+}
+
+type mockLifecycle struct{}
+
+func (_ *mockLifecycle) Append(fx.Hook) {
+	return
 }
