@@ -29,9 +29,10 @@ var ErrStoreIsClosed = errors.New("storage is closed")
 type ProfileStorage struct {
 	closed atomic.Bool
 	sync.Mutex
-	db          *genji.DB
-	metaCache   map[meta.ProfileTarget]*meta.TargetInfo
-	idAllocator int64
+	db           *genji.DB
+	metaCache    map[meta.ProfileTarget]*meta.TargetInfo
+	idAllocator  int64
+	aliveTargets []meta.ProfileTarget
 }
 
 func NewProfileStorage(storagePath string) (*ProfileStorage, error) {
@@ -148,7 +149,7 @@ func (s *ProfileStorage) QueryProfileList(param *meta.BasicQueryParam) ([]meta.P
 	}
 	targets := param.Targets
 	if len(targets) == 0 {
-		targets = s.getAllTargets()
+		targets = s.getAllTargetsFromCache()
 	}
 
 	var result []meta.ProfileList
@@ -202,7 +203,7 @@ func (s *ProfileStorage) QueryProfileData(param *meta.BasicQueryParam, handleFn 
 	}
 	targets := param.Targets
 	if len(targets) == 0 {
-		targets = s.getAllTargets()
+		targets = s.getAllTargetsFromCache()
 	}
 
 	args := []interface{}{param.Begin, param.End}
@@ -244,7 +245,7 @@ func (s *ProfileStorage) getTargetInfoFromCache(pt meta.ProfileTarget) *meta.Tar
 	return info
 }
 
-func (s *ProfileStorage) getAllTargets() []meta.ProfileTarget {
+func (s *ProfileStorage) getAllTargetsFromCache() []meta.ProfileTarget {
 	s.Lock()
 	defer s.Unlock()
 	targets := make([]meta.ProfileTarget, 0, len(s.metaCache))
@@ -295,22 +296,67 @@ func (s *ProfileStorage) createProfileTable(pt meta.ProfileTarget) (*meta.Target
 		ID:           s.allocID(),
 		LastScrapeTs: util.GetTimeStamp(time.Now()),
 	}
-	sql := fmt.Sprintf("INSERT INTO %v (id, kind, component, address, last_scrape_ts) VALUES (?, ?, ?, ?, ?)", metaTableName)
-	err := s.db.Exec(sql, info.ID, pt.Kind, pt.Component, pt.Address, info.LastScrapeTs)
+	tbName := s.getProfileTableName(info)
+	sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v (ts INTEGER PRIMARY KEY, data BLOB)", tbName)
+	err := s.db.Exec(sql)
 	if err != nil {
 		return info, err
 	}
-	tbName := s.getProfileTableName(info)
-	sql = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v (ts INTEGER PRIMARY KEY, data BLOB)", tbName)
-	err = s.db.Exec(sql)
+	sql = fmt.Sprintf("INSERT INTO %v (id, kind, component, address, last_scrape_ts) VALUES (?, ?, ?, ?, ?)", metaTableName)
+	err = s.db.Exec(sql, info.ID, pt.Kind, pt.Component, pt.Address, info.LastScrapeTs)
 	if err != nil {
 		return nil, err
 	}
 	logutil.BgLogger().Info("create profile target table",
+		zap.Int64("id", info.ID),
 		zap.String("component", pt.Component),
 		zap.String("address", pt.Address),
 		zap.String("kind", pt.Kind))
 	return info, nil
+}
+
+func (s *ProfileStorage) dropProfileTableIfStaled(pt meta.ProfileTarget, info meta.TargetInfo, safePointTs int64) error {
+	s.Lock()
+	defer s.Unlock()
+	lastScrapeTs := info.LastScrapeTs
+	cacheInfo := s.metaCache[pt]
+	if cacheInfo != nil {
+		if cacheInfo.ID != info.ID {
+			logutil.BgLogger().Error("must be something wrong, same target has different id",
+				zap.String("component", pt.Component),
+				zap.String("address", pt.Address),
+				zap.String("kind", pt.Kind),
+				zap.Int64("id-1", cacheInfo.ID),
+				zap.Int64("id-2", info.ID))
+		} else {
+			lastScrapeTs = cacheInfo.LastScrapeTs
+		}
+	}
+	if lastScrapeTs >= safePointTs {
+		return nil
+	}
+	// remove in meta table.
+	sql := fmt.Sprintf("DELETE FROM %v WHERE id = ?", metaTableName)
+	err := s.db.Exec(sql, info.ID)
+	if err != nil {
+		return err
+	}
+
+	// update cache
+	delete(s.metaCache, pt)
+
+	// drop the table
+	sql = fmt.Sprintf("DROP TABLE IF EXISTS %v", s.getProfileTableName(&info))
+	err = s.db.Exec(sql)
+	if err != nil {
+		return err
+	}
+	logutil.BgLogger().Info("drop profile target table",
+		zap.Int64("id", info.ID),
+		zap.String("component", pt.Component),
+		zap.String("address", pt.Address),
+		zap.String("kind", pt.Kind))
+	return nil
 }
 
 func (s *ProfileStorage) getProfileTableName(info *meta.TargetInfo) string {
