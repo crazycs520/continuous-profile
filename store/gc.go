@@ -29,8 +29,8 @@ func (s *ProfileStorage) runGC() {
 	targets := s.getAllTargets()
 	safePointTs := s.getLastSafePointTs()
 	for _, target := range targets {
-		info, exist := s.getTargetInfoFromCache(target)
-		if !exist {
+		info := s.getTargetInfoFromCache(target)
+		if info == nil {
 			continue
 		}
 		sql := fmt.Sprintf("DELETE FROM %v WHERE ts <= ?", s.getProfileTableName(info))

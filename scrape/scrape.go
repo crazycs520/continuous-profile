@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/crazycs520/continuous-profile/config"
@@ -24,24 +23,19 @@ import (
 )
 
 type ScrapeSuite struct {
-	scraper        Scraper
-	lastScrapeSize int
-
-	store *store.ProfileStorage
-
-	ctx       context.Context
-	scrapeCtx context.Context
-	cancel    func()
+	scraper    Scraper
+	lastScrape time.Time
+	store      *store.ProfileStorage
+	ctx        context.Context
+	cancel     func()
 }
 
 func newScrapeSuite(ctx context.Context, sc Scraper, store *store.ProfileStorage) *ScrapeSuite {
 	sl := &ScrapeSuite{
 		scraper: sc,
 		store:   store,
-		ctx:     ctx,
 	}
-	sl.scrapeCtx, sl.cancel = context.WithCancel(ctx)
-
+	sl.ctx, sl.cancel = context.WithCancel(ctx)
 	return sl
 }
 
@@ -55,7 +49,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 	select {
 	case <-time.After(time.Duration(nextStart)):
 		// Continue after a scraping offset.
-	case <-sl.scrapeCtx.Done():
+	case <-sl.ctx.Done():
 		return
 	}
 
@@ -89,7 +83,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 				}, ts, buf.Bytes())
 
 				if err == nil {
-					sl.scraper.target.lastScrape = start
+					sl.lastScrape = start
 				} else {
 					logutil.BgLogger().Error("save scrape data failed",
 						zap.String("component", target.Component),
@@ -108,8 +102,6 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 
 		select {
 		case <-sl.ctx.Done():
-			return
-		case <-sl.scrapeCtx.Done():
 			return
 		case <-ticker.C:
 		}
@@ -190,14 +182,8 @@ func (s *Scraper) tryUnzip(data []byte) []byte {
 // Target refers to a singular HTTP or HTTPS endpoint.
 type Target struct {
 	meta.ProfileTarget
-
 	header map[string]string
 	*url.URL
-
-	mu                 sync.RWMutex
-	lastError          error
-	lastScrape         time.Time
-	lastScrapeDuration time.Duration
 }
 
 func NewTarget(component, address, kind, schema string, cfg *config.PprofProfilingConfig) *Target {

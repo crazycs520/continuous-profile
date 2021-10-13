@@ -30,6 +30,7 @@ type Manager struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	mu           sync.Mutex
 	scrapeSuites map[meta.ProfileTarget]*ScrapeSuite
 }
 
@@ -50,6 +51,10 @@ func (m *Manager) Start() {
 	m.cancel = cancel
 	go util.GoWithRecovery(func() {
 		m.run(ctx)
+	}, nil)
+
+	go util.GoWithRecovery(func() {
+		m.updateTargetMetaLoop(ctx)
 	}, nil)
 }
 
@@ -75,6 +80,41 @@ func (m *Manager) GetCurrentScrapeComponents() []discovery.Component {
 		return components[i].Port < components[j].Port
 	})
 	return components
+}
+
+func (m *Manager) updateTargetMetaLoop(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.updateTargetMeta()
+		}
+	}
+}
+
+func (m *Manager) updateTargetMeta() {
+	targets, suites := m.getAllCurrentScrapeSuite()
+	count := 0
+	for i, suite := range suites {
+		ts := util.GetTimeStamp(suite.lastScrape)
+		if ts <= 0 {
+			continue
+		}
+		target := targets[i]
+		updated, err := m.store.UpdateProfileTargetInfo(target, ts)
+		if err != nil {
+			logutil.BgLogger().Error("update profile target info failed",
+				zap.String("component", target.Component),
+				zap.String("kind", target.Kind),
+				zap.String("address", target.Address),
+				zap.Error(err))
+		} else if updated {
+			count++
+		}
+	}
+	logutil.BgLogger().Info("update profile target info finished", zap.Int("update-count", count))
 }
 
 func (m *Manager) run(ctx context.Context) {
@@ -149,7 +189,7 @@ func (m *Manager) startScrape(ctx context.Context, component discovery.Component
 		}
 		scrape := newScraper(target, client)
 		scrapeSuite := newScrapeSuite(ctx, scrape, m.store)
-		key := meta.ProfileTarget{
+		pt := meta.ProfileTarget{
 			Kind:      profileName,
 			Component: component.Name,
 			Address:   addr,
@@ -162,7 +202,7 @@ func (m *Manager) startScrape(ctx context.Context, component discovery.Component
 			defer m.wg.Done()
 			scrapeSuite.run(interval, timeout)
 		}, nil)
-		m.scrapeSuites[key] = scrapeSuite
+		m.addScrapeSuite(pt, scrapeSuite)
 	}
 	m.curComponents[component] = struct{}{}
 	logutil.BgLogger().Info("start component scrape",
@@ -184,11 +224,11 @@ func (m *Manager) stopScrape(component discovery.Component) {
 			Component: component.Name,
 			Address:   addr,
 		}
-		scrapeSuite, ok := m.scrapeSuites[key]
-		if !ok {
+		suite := m.deleteScrapeSuite(key)
+		if suite == nil {
 			continue
 		}
-		scrapeSuite.stop()
+		suite.stop()
 	}
 }
 
@@ -199,6 +239,34 @@ func (m *Manager) getProfilingConfig(component discovery.Component) *config.Prof
 	default:
 		return nonGoAppProfilingConfig()
 	}
+}
+
+func (m *Manager) addScrapeSuite(pt meta.ProfileTarget, suite *ScrapeSuite) {
+	m.mu.Lock()
+	m.scrapeSuites[pt] = suite
+	m.mu.Unlock()
+}
+
+func (m *Manager) deleteScrapeSuite(pt meta.ProfileTarget) *ScrapeSuite {
+	m.mu.Lock()
+	suite := m.scrapeSuites[pt]
+	if suite != nil {
+		delete(m.scrapeSuites, pt)
+	}
+	m.mu.Unlock()
+	return suite
+}
+
+func (m *Manager) getAllCurrentScrapeSuite() ([]meta.ProfileTarget, []*ScrapeSuite) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	targets := make([]meta.ProfileTarget, 0, len(m.scrapeSuites))
+	suites := make([]*ScrapeSuite, 0, len(m.scrapeSuites))
+	for target, suite := range m.scrapeSuites {
+		targets = append(targets, target)
+		suites = append(suites, suite)
+	}
+	return targets, suites
 }
 
 func (m *Manager) Close() error {

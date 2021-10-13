@@ -30,7 +30,7 @@ type ProfileStorage struct {
 	closed atomic.Bool
 	sync.Mutex
 	db          *genji.DB
-	metaCache   map[meta.ProfileTarget]meta.TargetInfo
+	metaCache   map[meta.ProfileTarget]*meta.TargetInfo
 	idAllocator int64
 }
 
@@ -51,7 +51,7 @@ func NewProfileStorage(storagePath string) (*ProfileStorage, error) {
 	}
 	store := &ProfileStorage{
 		db:        db,
-		metaCache: make(map[meta.ProfileTarget]meta.TargetInfo),
+		metaCache: make(map[meta.ProfileTarget]*meta.TargetInfo),
 	}
 	err = store.init()
 	if err != nil {
@@ -68,10 +68,6 @@ func (s *ProfileStorage) init() error {
 	if err != nil {
 		return err
 	}
-	err = s.loadMetaIntoCache()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -81,9 +77,9 @@ func (s *ProfileStorage) initMetaTable() error {
 	return s.db.Exec(sql)
 }
 
-func (s *ProfileStorage) loadMetaIntoCache() error {
-	query := fmt.Sprintf("SELECT id, kind, component, address, last_scrape_ts FROM %v", metaTableName)
-	res, err := s.db.Query(query)
+func (s *ProfileStorage) loadMetaIntoCache(target meta.ProfileTarget) error {
+	query := fmt.Sprintf("SELECT id, last_scrape_ts FROM %v WHERE kind = ? AND component = ? AND address = ?", metaTableName)
+	res, err := s.db.Query(query, target.Kind, target.Component, target.Address)
 	if err != nil {
 		return err
 	}
@@ -91,18 +87,12 @@ func (s *ProfileStorage) loadMetaIntoCache() error {
 
 	err = res.Iterate(func(d types.Document) error {
 		var id, ts int64
-		var kind, component, address string
-		err = document.Scan(d, &id, &kind, &component, &address, &ts)
+		err = document.Scan(d, &id, &ts)
 		if err != nil {
 			return err
 		}
 		s.rebaseID(id)
-		target := meta.ProfileTarget{
-			Kind:      kind,
-			Component: component,
-			Address:   address,
-		}
-		s.metaCache[target] = meta.TargetInfo{
+		s.metaCache[target] = &meta.TargetInfo{
 			ID:           id,
 			LastScrapeTs: ts,
 		}
@@ -115,6 +105,25 @@ func (s *ProfileStorage) loadMetaIntoCache() error {
 		return nil
 	})
 	return err
+}
+
+func (s *ProfileStorage) UpdateProfileTargetInfo(pt meta.ProfileTarget, ts int64) (bool, error) {
+	if s.isClose() {
+		return false, ErrStoreIsClosed
+	}
+	s.Lock()
+	info := s.metaCache[pt]
+	s.Unlock()
+	if info == nil || ts <= info.LastScrapeTs {
+		return false, nil
+	}
+	info.LastScrapeTs = ts
+	sql := fmt.Sprintf("UPDATE %v set last_scrape_ts = ? where id = ?", metaTableName)
+	err := s.db.Exec(sql, ts, info.ID)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *ProfileStorage) AddProfile(pt meta.ProfileTarget, ts int64, profile []byte) error {
@@ -145,8 +154,8 @@ func (s *ProfileStorage) QueryProfileList(param *meta.BasicQueryParam) ([]meta.P
 	var result []meta.ProfileList
 	args := []interface{}{param.Begin, param.End}
 	for _, pt := range targets {
-		info, exist := s.getTargetInfoFromCache(pt)
-		if !exist {
+		info := s.getTargetInfoFromCache(pt)
+		if info == nil {
 			result = append(result, meta.ProfileList{
 				Target: pt,
 			})
@@ -198,8 +207,8 @@ func (s *ProfileStorage) QueryProfileData(param *meta.BasicQueryParam, handleFn 
 
 	args := []interface{}{param.Begin, param.End}
 	for _, pt := range targets {
-		info, exist := s.getTargetInfoFromCache(pt)
-		if !exist {
+		info := s.getTargetInfoFromCache(pt)
+		if info == nil {
 			continue
 		}
 		query := fmt.Sprintf("SELECT ts, data FROM %v WHERE ts >= ? and ts <= ?", s.getProfileTableName(info))
@@ -228,11 +237,11 @@ func (s *ProfileStorage) QueryProfileData(param *meta.BasicQueryParam, handleFn 
 	return nil
 }
 
-func (s *ProfileStorage) getTargetInfoFromCache(pt meta.ProfileTarget) (meta.TargetInfo, bool) {
+func (s *ProfileStorage) getTargetInfoFromCache(pt meta.ProfileTarget) *meta.TargetInfo {
 	s.Lock()
-	info, ok := s.metaCache[pt]
+	info := s.metaCache[pt]
 	s.Unlock()
-	return info, ok
+	return info
 }
 
 func (s *ProfileStorage) getAllTargets() []meta.ProfileTarget {
@@ -257,14 +266,21 @@ func (s *ProfileStorage) isClose() bool {
 	return s.closed.Load()
 }
 
-func (s *ProfileStorage) prepareProfileTable(pt meta.ProfileTarget) (meta.TargetInfo, error) {
+func (s *ProfileStorage) prepareProfileTable(pt meta.ProfileTarget) (*meta.TargetInfo, error) {
 	s.Lock()
 	defer s.Unlock()
-	info, ok := s.metaCache[pt]
-	if ok {
+	info := s.metaCache[pt]
+	if info != nil {
 		return info, nil
 	}
-	var err error
+	err := s.loadMetaIntoCache(pt)
+	if err != nil {
+		return nil, err
+	}
+	info = s.metaCache[pt]
+	if info != nil {
+		return info, nil
+	}
 	info, err = s.createProfileTable(pt)
 	if err != nil {
 		return info, err
@@ -274,10 +290,10 @@ func (s *ProfileStorage) prepareProfileTable(pt meta.ProfileTarget) (meta.Target
 	return info, nil
 }
 
-func (s *ProfileStorage) createProfileTable(pt meta.ProfileTarget) (meta.TargetInfo, error) {
-	info := meta.TargetInfo{
+func (s *ProfileStorage) createProfileTable(pt meta.ProfileTarget) (*meta.TargetInfo, error) {
+	info := &meta.TargetInfo{
 		ID:           s.allocID(),
-		LastScrapeTs: time.Now().Unix(),
+		LastScrapeTs: util.GetTimeStamp(time.Now()),
 	}
 	sql := fmt.Sprintf("INSERT INTO %v (id, kind, component, address, last_scrape_ts) VALUES (?, ?, ?, ?, ?)", metaTableName)
 	err := s.db.Exec(sql, info.ID, pt.Kind, pt.Component, pt.Address, info.LastScrapeTs)
@@ -287,10 +303,17 @@ func (s *ProfileStorage) createProfileTable(pt meta.ProfileTarget) (meta.TargetI
 	tbName := s.getProfileTableName(info)
 	sql = fmt.Sprintf("CREATE TABLE IF NOT EXISTS %v (ts INTEGER PRIMARY KEY, data BLOB)", tbName)
 	err = s.db.Exec(sql)
-	return info, err
+	if err != nil {
+		return nil, err
+	}
+	logutil.BgLogger().Info("create profile target table",
+		zap.String("component", pt.Component),
+		zap.String("address", pt.Address),
+		zap.String("kind", pt.Kind))
+	return info, nil
 }
 
-func (s *ProfileStorage) getProfileTableName(info meta.TargetInfo) string {
+func (s *ProfileStorage) getProfileTableName(info *meta.TargetInfo) string {
 	return fmt.Sprintf("`%v_%v`", tableNamePrefix, info.ID)
 }
 
