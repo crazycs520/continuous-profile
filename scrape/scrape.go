@@ -89,6 +89,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 						zap.String("component", target.Component),
 						zap.String("address", target.Address),
 						zap.String("kind", target.Kind),
+						zap.Int64("ts", ts),
 						zap.Error(err))
 				}
 			}
