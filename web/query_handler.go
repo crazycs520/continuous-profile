@@ -4,12 +4,15 @@ import (
 	"archive/zip"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/util/logutil"
 	"go.uber.org/zap"
-	"io"
-	"net/http"
-	"time"
 )
 
 type Config struct {
@@ -83,6 +86,35 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleComponents(w http.ResponseWriter, r *http.Request) {
 	components := s.scraper.GetCurrentScrapeComponents()
 	writeData(w, components)
+}
+
+func (s *Server) handleEstimateSize(w http.ResponseWriter, r *http.Request) {
+	days := 0
+	if value := r.FormValue("days"); len(value) > 0 {
+		v, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			serveError(w, http.StatusInternalServerError, "params days value is invalid, should be int")
+			return
+		}
+		days = int(v)
+	}
+	if days == 0 {
+		writeData(w, 0)
+		return
+	}
+	_, suites := s.scraper.GetAllCurrentScrapeSuite()
+	totalSize := 0
+	for _, suite := range suites {
+		size := suite.LastScrapeSize()
+		if size == 0 {
+			size = 500 * 1024
+		}
+		totalSize += size
+	}
+	cfg := config.GetGlobalConfig().ContinueProfiling
+	compressRatio := 10
+	estimateSize := (days * 24 * 60 * 60 / cfg.IntervalSeconds) * totalSize / compressRatio
+	writeData(w, estimateSize)
 }
 
 func (s *Server) getQueryParamFromBody(r *http.Request) (*meta.BasicQueryParam, error) {

@@ -95,7 +95,7 @@ func (m *Manager) updateTargetMetaLoop(ctx context.Context) {
 }
 
 func (m *Manager) updateTargetMeta() {
-	targets, suites := m.getAllCurrentScrapeSuite()
+	targets, suites := m.GetAllCurrentScrapeSuite()
 	count := 0
 	for i, suite := range suites {
 		ts := util.GetTimeStamp(suite.lastScrape)
@@ -257,7 +257,7 @@ func (m *Manager) deleteScrapeSuite(pt meta.ProfileTarget) *ScrapeSuite {
 	return suite
 }
 
-func (m *Manager) getAllCurrentScrapeSuite() ([]meta.ProfileTarget, []*ScrapeSuite) {
+func (m *Manager) GetAllCurrentScrapeSuite() ([]meta.ProfileTarget, []*ScrapeSuite) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	targets := make([]meta.ProfileTarget, 0, len(m.scrapeSuites))

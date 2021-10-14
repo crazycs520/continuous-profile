@@ -23,11 +23,12 @@ import (
 )
 
 type ScrapeSuite struct {
-	scraper    Scraper
-	lastScrape time.Time
-	store      *store.ProfileStorage
-	ctx        context.Context
-	cancel     func()
+	scraper        Scraper
+	lastScrape     time.Time
+	lastScrapeSize int
+	store          *store.ProfileStorage
+	ctx            context.Context
+	cancel         func()
 }
 
 func newScrapeSuite(ctx context.Context, sc Scraper, store *store.ProfileStorage) *ScrapeSuite {
@@ -57,13 +58,13 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 	defer ticker.Stop()
 
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
-	lastScrapeSize := 0
+	sl.lastScrapeSize = 0
 
 	for {
 		start := time.Now()
-		if lastScrapeSize > 0 && buf.Cap() > 2*lastScrapeSize {
+		if sl.lastScrapeSize > 0 && buf.Cap() > 2*sl.lastScrapeSize {
 			// shrink the buffer size.
-			buf = bytes.NewBuffer(make([]byte, 0, lastScrapeSize))
+			buf = bytes.NewBuffer(make([]byte, 0, sl.lastScrapeSize))
 		}
 
 		buf.Reset()
@@ -74,7 +75,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 
 		if scrapeErr == nil {
 			if buf.Len() > 0 {
-				lastScrapeSize = buf.Len()
+				sl.lastScrapeSize = buf.Len()
 				ts := util.GetTimeStamp(start)
 				err := sl.store.AddProfile(meta.ProfileTarget{
 					Kind:      sl.scraper.target.Kind,
@@ -113,6 +114,10 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 // returned. Cancel the context to stop all writes.
 func (sl *ScrapeSuite) stop() {
 	sl.cancel()
+}
+
+func (sl *ScrapeSuite) LastScrapeSize() int {
+	return sl.lastScrapeSize
 }
 
 type Scraper struct {

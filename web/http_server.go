@@ -61,6 +61,7 @@ func (s *Server) createMux() *http.ServeMux {
 	router.HandleFunc("/continuous-profiling/list", s.handleQueryList)
 	router.HandleFunc("/continuous-profiling/download", s.handleDownload)
 	router.HandleFunc("/continuous-profiling/components", s.handleComponents)
+	router.HandleFunc("/continuous-profiling/estimate_size", s.handleEstimateSize)
 
 	serverMux := http.NewServeMux()
 	serverMux.Handle("/", router)
