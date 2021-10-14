@@ -69,6 +69,11 @@ func (s *ProfileStorage) init() error {
 	if err != nil {
 		return err
 	}
+	allTargets, allInfos, err := s.loadAllTargetsFromTable()
+	for i, target := range allTargets {
+		info := allInfos[i]
+		s.metaCache[target] = &info
+	}
 	return nil
 }
 
