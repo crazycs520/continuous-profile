@@ -20,6 +20,7 @@ const (
 	nmPort    = "port"
 	nmConfig  = "config"
 	nmLogFile = "log-file"
+	nmPDAddr  = "pd-address"
 )
 
 var (
@@ -27,6 +28,7 @@ var (
 	port       = flag.Uint(nmPort, config.DefPort, "http server port")
 	configPath = flag.String(nmConfig, "", "config file path")
 	logFile    = flag.String(nmLogFile, "", "log file name")
+	pdAddress  = flag.String(nmPDAddr, "127.0.0.1:2379", "PD address")
 )
 
 func main() {
@@ -87,6 +89,9 @@ func overrideConfig(cfg *config.Config) {
 	}
 	if actualFlags[nmLogFile] {
 		cfg.Log.Filename = *logFile
+	}
+	if actualFlags[nmPDAddr] {
+		cfg.PDAddr = *pdAddress
 	}
 }
 
