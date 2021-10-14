@@ -27,9 +27,6 @@ const (
 	DefaultLogMaxSize = 300 // MB
 )
 
-// EmptyFileLogConfig is an empty FileLogConfig.
-var EmptyFileLogConfig = log.FileLogConfig{}
-
 // NewFileLogConfig creates a FileLogConfig.
 func NewFileLogConfig(maxSize uint) log.FileLogConfig {
 	return log.FileLogConfig{
@@ -62,16 +59,6 @@ func InitLogger(cfg *LogConfig) error {
 	}
 	log.ReplaceGlobals(gl, props)
 
-	return nil
-}
-
-// SetLevel sets the zap logger's level.
-func SetLevel(level string) error {
-	l := zap.NewAtomicLevel()
-	if err := l.UnmarshalText([]byte(level)); err != nil {
-		return errors.Trace(err)
-	}
-	log.SetLevel(l.Level())
 	return nil
 }
 

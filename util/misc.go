@@ -1,14 +1,14 @@
 package util
 
-import "time"
+import (
+	"time"
+
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
+)
 
 func GetTimeStamp(t time.Time) int64 {
 	return t.Unix()
-}
-
-// Millisecond returns the millisecond timestamp of the input time.
-func Millisecond(t time.Time) int64 {
-	return t.Unix()*1000 + int64(t.Nanosecond())/int64(time.Millisecond)
 }
 
 // GoWithRecovery wraps goroutine startup call with force recovery.
@@ -22,9 +22,9 @@ func GoWithRecovery(exec func(), recoverFn func(r interface{})) {
 			recoverFn(r)
 		}
 		if r != nil {
-			//logutil.BgLogger().Error("panic in the recoverable goroutine",
-			//	zap.Reflect("r", r),
-			//	zap.Stack("stack trace"))
+			log.Error("panic in the recoverable goroutine",
+				zap.Reflect("r", r),
+				zap.Stack("stack trace"))
 		}
 	}()
 	exec()

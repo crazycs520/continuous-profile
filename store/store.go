@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/util"
 	"github.com/crazycs520/continuous-profile/util/logutil"
@@ -13,10 +16,9 @@ import (
 	"github.com/genjidb/genji/document"
 	"github.com/genjidb/genji/engine/badgerengine"
 	"github.com/genjidb/genji/types"
+	"github.com/pingcap/log"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 const (
@@ -102,7 +104,7 @@ func (s *ProfileStorage) loadMetaIntoCache(target meta.ProfileTarget) error {
 			ID:           id,
 			LastScrapeTs: ts,
 		}
-		logutil.BgLogger().Info("load target info into cache",
+		log.Info("load target info into cache",
 			zap.String("component", target.Component),
 			zap.String("address", target.Address),
 			zap.String("kind", target.Kind),
@@ -312,7 +314,7 @@ func (s *ProfileStorage) createProfileTable(pt meta.ProfileTarget) (*meta.Target
 	if err != nil {
 		return nil, err
 	}
-	logutil.BgLogger().Info("create profile target table",
+	log.Info("create profile target table",
 		zap.Int64("id", info.ID),
 		zap.String("component", pt.Component),
 		zap.String("address", pt.Address),
@@ -327,7 +329,7 @@ func (s *ProfileStorage) dropProfileTableIfStaled(pt meta.ProfileTarget, info me
 	cacheInfo := s.metaCache[pt]
 	if cacheInfo != nil {
 		if cacheInfo.ID != info.ID {
-			logutil.BgLogger().Error("must be something wrong, same target has different id",
+			log.Error("must be something wrong, same target has different id",
 				zap.String("component", pt.Component),
 				zap.String("address", pt.Address),
 				zap.String("kind", pt.Kind),
@@ -356,7 +358,7 @@ func (s *ProfileStorage) dropProfileTableIfStaled(pt meta.ProfileTarget, info me
 	if err != nil {
 		return err
 	}
-	logutil.BgLogger().Info("drop profile target table",
+	log.Info("drop profile target table",
 		zap.Int64("id", info.ID),
 		zap.String("component", pt.Component),
 		zap.String("address", pt.Address),

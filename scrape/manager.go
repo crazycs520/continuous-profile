@@ -13,7 +13,7 @@ import (
 	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
-	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	commonconfig "github.com/prometheus/common/config"
 	"go.uber.org/zap"
 )
@@ -105,7 +105,7 @@ func (m *Manager) updateTargetMeta() {
 		target := targets[i]
 		updated, err := m.store.UpdateProfileTargetInfo(target, ts)
 		if err != nil {
-			logutil.BgLogger().Error("update profile target info failed",
+			log.Error("update profile target info failed",
 				zap.String("component", target.Component),
 				zap.String("kind", target.Kind),
 				zap.String("address", target.Address),
@@ -114,7 +114,7 @@ func (m *Manager) updateTargetMeta() {
 			count++
 		}
 	}
-	logutil.BgLogger().Info("update profile target info finished", zap.Int("update-count", count))
+	log.Info("update profile target info finished", zap.Int("update-count", count))
 }
 
 func (m *Manager) run(ctx context.Context) {
@@ -166,7 +166,7 @@ func (m *Manager) reload(ctx context.Context, oldCfg, newCfg config.ContinueProf
 		}
 		err := m.startScrape(ctx, comp, newCfg)
 		if err != nil {
-			logutil.BgLogger().Error("start scrape failed",
+			log.Error("start scrape failed",
 				zap.String("component", comp.Name),
 				zap.String("address", comp.IP+":"+strconv.Itoa(int(comp.StatusPort))))
 		}
@@ -205,7 +205,7 @@ func (m *Manager) startScrape(ctx context.Context, component discovery.Component
 		m.addScrapeSuite(pt, scrapeSuite)
 	}
 	m.curComponents[component] = struct{}{}
-	logutil.BgLogger().Info("start component scrape",
+	log.Info("start component scrape",
 		zap.String("component", component.Name),
 		zap.String("address", addr))
 	return nil
@@ -214,7 +214,7 @@ func (m *Manager) startScrape(ctx context.Context, component discovery.Component
 func (m *Manager) stopScrape(component discovery.Component) {
 	delete(m.curComponents, component)
 	addr := fmt.Sprintf("%v:%v", component.IP, component.StatusPort)
-	logutil.BgLogger().Info("stop component scrape",
+	log.Info("stop component scrape",
 		zap.String("component", component.Name),
 		zap.String("address", addr))
 	profilingConfig := m.getProfilingConfig(component)

@@ -16,7 +16,7 @@ import (
 	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
-	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/net/context/ctxhttp"
@@ -42,7 +42,7 @@ func newScrapeSuite(ctx context.Context, sc Scraper, store *store.ProfileStorage
 
 func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 	target := sl.scraper.target
-	logutil.BgLogger().Info("scraper start to run",
+	log.Info("scraper start to run",
 		zap.String("component", target.Component),
 		zap.String("address", target.Address),
 		zap.String("kind", target.Kind))
@@ -86,7 +86,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 				if err == nil {
 					sl.lastScrape = start
 				} else {
-					logutil.BgLogger().Error("save scrape data failed",
+					log.Error("save scrape data failed",
 						zap.String("component", target.Component),
 						zap.String("address", target.Address),
 						zap.String("kind", target.Kind),
@@ -95,7 +95,7 @@ func (sl *ScrapeSuite) run(interval, timeout time.Duration) {
 				}
 			}
 		} else {
-			logutil.BgLogger().Error("scrape failed",
+			log.Error("scrape failed",
 				zap.String("component", target.Component),
 				zap.String("address", target.Address),
 				zap.String("kind", target.Kind),

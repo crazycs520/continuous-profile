@@ -11,7 +11,7 @@ import (
 
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/meta"
-	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 
@@ -79,7 +79,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	err = zw.Close()
 	if err != nil {
-		logutil.BgLogger().Error("handle download request failed", zap.Error(err))
+		log.Error("handle download request failed", zap.Error(err))
 	}
 }
 
@@ -149,7 +149,7 @@ func writeData(w http.ResponseWriter, data interface{}) {
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(js)
 	if err != nil {
-		logutil.BgLogger().Error("write http response error", zap.Error(err))
+		log.Error("write http response error", zap.Error(err))
 	}
 }
 
@@ -159,6 +159,6 @@ func serveError(w http.ResponseWriter, status int, txt string) {
 	w.WriteHeader(status)
 	_, err := fmt.Fprintln(w, txt)
 	if err != nil {
-		logutil.BgLogger().Error("serve error", zap.Error(err))
+		log.Error("serve error", zap.Error(err))
 	}
 }

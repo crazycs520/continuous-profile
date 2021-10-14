@@ -5,7 +5,7 @@ import (
 	"github.com/crazycs520/continuous-profile/scrape"
 	"github.com/crazycs520/continuous-profile/store"
 	"github.com/crazycs520/continuous-profile/util"
-	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
@@ -42,10 +42,10 @@ func (s *Server) StartServer() error {
 	go util.GoWithRecovery(func() {
 		err = s.httpServer.Serve(listener)
 		if err != nil {
-			logutil.BgLogger().Error("http server serve failed", zap.Error(err))
+			log.Error("http server serve failed", zap.Error(err))
 		}
 	}, nil)
-	logutil.BgLogger().Info("http server started", zap.String("address", s.address))
+	log.Info("http server started", zap.String("address", s.address))
 	return nil
 }
 

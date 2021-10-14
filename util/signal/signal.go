@@ -1,13 +1,14 @@
 package signal
 
 import (
-	"github.com/crazycs520/continuous-profile/util/logutil"
-	"go.uber.org/zap"
 	"log"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	log2 "github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 // SetupSignalHandler setup signal handler for TiDB Server
@@ -35,7 +36,7 @@ func SetupSignalHandler(shutdownFunc func(bool)) {
 
 	go func() {
 		sig := <-closeSignalChan
-		logutil.BgLogger().Info("got signal to exit", zap.Stringer("signal", sig))
+		log2.Info("got signal to exit", zap.Stringer("signal", sig))
 		shutdownFunc(sig == syscall.SIGQUIT)
 	}()
 }

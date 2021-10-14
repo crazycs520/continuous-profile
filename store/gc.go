@@ -7,9 +7,9 @@ import (
 	"github.com/crazycs520/continuous-profile/config"
 	"github.com/crazycs520/continuous-profile/meta"
 	"github.com/crazycs520/continuous-profile/util"
-	"github.com/crazycs520/continuous-profile/util/logutil"
 	"github.com/genjidb/genji/document"
 	"github.com/genjidb/genji/types"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 
@@ -31,7 +31,7 @@ func (s *ProfileStorage) runGC() {
 	start := time.Now()
 	allTargets, allInfos, err := s.loadAllTargetsFromTable()
 	if err != nil {
-		logutil.BgLogger().Info("gc load all target info from meta table failed", zap.Error(err))
+		log.Info("gc load all target info from meta table failed", zap.Error(err))
 		return
 	}
 	safePointTs := s.getLastSafePointTs()
@@ -40,14 +40,14 @@ func (s *ProfileStorage) runGC() {
 		sql := fmt.Sprintf("DELETE FROM %v WHERE ts <= ?", s.getProfileTableName(&info))
 		err := s.db.Exec(sql, safePointTs)
 		if err != nil {
-			logutil.BgLogger().Error("gc delete target data failed", zap.Error(err))
+			log.Error("gc delete target data failed", zap.Error(err))
 		}
 		err = s.dropProfileTableIfStaled(target, info, safePointTs)
 		if err != nil {
-			logutil.BgLogger().Error("gc drop target table failed", zap.Error(err))
+			log.Error("gc drop target table failed", zap.Error(err))
 		}
 	}
-	logutil.BgLogger().Info("gc finished",
+	log.Info("gc finished",
 		zap.Int("total-targets", len(allTargets)),
 		zap.Int64("safepoint", safePointTs),
 		zap.Duration("cost", time.Since(start)))
@@ -84,7 +84,7 @@ func (s *ProfileStorage) loadAllTargetsFromTable() ([]meta.ProfileTarget, []meta
 		infos = append(infos, info)
 		return nil
 	})
-	logutil.BgLogger().Info("gc load all target info from meta table",
+	log.Info("gc load all target info from meta table",
 		zap.Int("all-target-count", len(targets)))
 	return targets, infos, nil
 }

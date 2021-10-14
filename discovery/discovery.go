@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/crazycs520/continuous-profile/util"
-	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	dashboard_config "github.com/pingcap/tidb-dashboard/pkg/config"
 	"github.com/pingcap/tidb-dashboard/pkg/httpc"
 	"github.com/pingcap/tidb-dashboard/pkg/pd"
@@ -95,7 +95,7 @@ func (d *TopologyDiscoverer) loadTopology() {
 	defer cancel()
 	components, err := d.getAllScrapeTargets(ctx)
 	if err != nil {
-		logutil.BgLogger().Error("load topology failed", zap.Error(err))
+		log.Error("load topology failed", zap.Error(err))
 		return
 	}
 	d.notifySubscriber(components)

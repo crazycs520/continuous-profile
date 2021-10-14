@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/crazycs520/continuous-profile/config"
-	"github.com/crazycs520/continuous-profile/util/logutil"
+	"github.com/pingcap/log"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +24,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.handleConfigModify(w, r)
 	if err != nil {
-		logutil.BgLogger().Info("handle config modify failed", zap.Error(err))
+		log.Info("handle config modify failed", zap.Error(err))
 		serveError(w, http.StatusBadRequest, "parse query param error: "+err.Error())
 		return
 	}
@@ -71,7 +71,7 @@ func (s *Server) handleContinueProfilingConfigModify(w http.ResponseWriter, reqN
 			continue
 		}
 		currentNested[k] = newValue
-		logutil.BgLogger().Info("handle continuous profiling config modify",
+		log.Info("handle continuous profiling config modify",
 			zap.String("name", k),
 			zap.Reflect("old-value", oldValue),
 			zap.Reflect("new-value", newValue))
